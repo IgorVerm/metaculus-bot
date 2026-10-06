@@ -26,10 +26,13 @@ FORECASTER_TRIES = 2
 PARSER_MODEL = "openrouter/openai/gpt-6-luna"
 SUMMARIZER_MODEL = "openrouter/openai/gpt-6-luna"
 
-# Research. AskNews is free for tournament entrants once granted; without its credentials the
-# bot falls back to a search-backed model on the donated key. BOT_RESEARCHER overrides both.
+# Research. AskNews is free for tournament entrants once granted (1,000 calls a month, 4,000
+# for the tournament; the template's news search uses six calls per question). Without its
+# credentials the bot uses a model with its vendor's own web search, through the ":online"
+# suffix. The donated key serves only OpenAI, Anthropic and Google models, so the fallback
+# must be one of those. BOT_RESEARCHER overrides both.
 RESEARCHER_WITH_ASKNEWS = "asknews/news-summaries"
-RESEARCHER_WITHOUT_ASKNEWS = "openrouter/perplexity/sonar"
+RESEARCHER_WITHOUT_ASKNEWS = "openrouter/openai/gpt-6.1-sol:online"
 RESEARCHER_ENV = "BOT_RESEARCHER"
 
 # Donated credit left on the OpenRouter key, in US dollars.

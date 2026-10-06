@@ -11,7 +11,10 @@ Checked on 2026-10-06.
 - Unit tests pass and the bot builds on a runner. It has never run against Metaculus or a
   model: the repository has no secrets yet (issue #4, the owner's steps).
 - Not verified until that first run: the model names resolve on the donated key, the
-  `reasoning` setting is accepted, and the fallback researcher is allowed on the donated key.
+  `reasoning` setting is accepted, and the `:online` research fallback works and what it costs.
+- The donated key serves OpenAI, Anthropic and Google models only, and its credit is not
+  refilled within a season. AskNews allows 1,000 calls a month; the template's news search
+  uses six per question.
 - Nothing publishes. The repository variable `BOT_LIVE` is unset, so scheduled runs are skipped
   and manual runs are dry runs. Switching it on is issue #6, the owner's decision.
 
@@ -29,7 +32,8 @@ those words.
 
 Repository variables: `BOT_LIVE` (`true` publishes and enables the schedule), `BOT_RESEARCHER`
 (optional override of the research source). Secrets: `METACULUS_TOKEN`, `OPENROUTER_API_KEY`,
-and `ASKNEWS_CLIENT_ID` with `ASKNEWS_SECRET` when granted. `OPENROUTER_API_KEY` must be the key
+and, when granted, `ASKNEWS_API_KEY` (or `ASKNEWS_CLIENT_ID` with `ASKNEWS_SECRET`).
+`OPENROUTER_API_KEY` must be the key
 Metaculus donates and no other key; it is unset until that key
 arrives.
 

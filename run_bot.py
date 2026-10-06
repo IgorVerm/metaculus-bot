@@ -94,7 +94,8 @@ def choose_researcher() -> str:
     override = os.environ.get(config.RESEARCHER_ENV)
     if override:
         return override
-    if os.environ.get("ASKNEWS_CLIENT_ID") and os.environ.get("ASKNEWS_SECRET"):
+    has_pair = os.environ.get("ASKNEWS_CLIENT_ID") and os.environ.get("ASKNEWS_SECRET")
+    if has_pair or os.environ.get("ASKNEWS_API_KEY"):
         return config.RESEARCHER_WITH_ASKNEWS
     return config.RESEARCHER_WITHOUT_ASKNEWS
 
