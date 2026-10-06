@@ -98,17 +98,34 @@ class ConfigTest(unittest.TestCase):
         # credential into the model settings that the bot publishes with each forecast.
         names = [spec["model"] for spec in config.FORECASTERS]
         names += [config.PARSER_MODEL, config.SUMMARIZER_MODEL, config.RESEARCHER_WITHOUT_ASKNEWS]
+        names.append(config.SEARCH_MODEL)
         for name in names:
             self.assertTrue(name.startswith("openrouter/"), name)
 
     def test_no_google_model(self):
+        names = [spec["model"] for spec in config.FORECASTERS]
+        names += [config.PARSER_MODEL, config.RESEARCHER_WITHOUT_ASKNEWS, config.SEARCH_MODEL]
+        for name in names:
+            self.assertNotIn("google", name)
+            self.assertNotIn("gemini", name)
+
+    def test_two_models_from_two_vendors_at_high_effort(self):
+        vendors = [spec["model"].split("/")[1] for spec in config.FORECASTERS]
+        self.assertEqual(vendors, ["openai", "anthropic"])
         for spec in config.FORECASTERS:
-            self.assertNotIn("google", spec["model"])
+            self.assertEqual(spec["reasoning"], {"effort": "high"})
 
     def test_three_forecasts_from_two_vendors(self):
-        vendors = {spec["model"].split("/")[1] for spec in config.FORECASTERS}
-        self.assertEqual(len(config.FORECASTERS), 3)
-        self.assertEqual(len(vendors), 2)
+        # The question types outside our method: three plain forecasts, the first vendor twice.
+        lineup = [config.FORECASTERS[slot] for slot in config.PLAIN_FORECAST_SLOTS]
+        vendors = [spec["model"].split("/")[1] for spec in lineup]
+        self.assertEqual(len(lineup), 3)
+        self.assertEqual(len(set(vendors)), 2)
+        self.assertEqual(vendors, ["openai", "anthropic", "openai"])
+
+    def test_search_model_searches_and_is_from_a_vendor_the_key_serves(self):
+        self.assertTrue(config.SEARCH_MODEL.endswith(":online"))
+        self.assertIn(config.SEARCH_MODEL.split("/")[1], ("openai", "anthropic"))
 
 
 if __name__ == "__main__":
