@@ -6,7 +6,9 @@ discard uncommitted work; push and anything else that leaves the machine only on
 word; never commit a secret. This file adds only what is specific to this repository.
 
 ## Deviations from the general rules
-None.
+- **This repository is public, by the owner's decision** (`DESIGN_DECISIONS.md`, 2026-10-06). The
+  `push-main` skill's first step, proving a repository is private before its first push, does
+  not apply here. Everything else in that skill does.
 
 ## Rules of this repository
 - **This repository is public, and so are its run logs.** Nothing private goes into code,
