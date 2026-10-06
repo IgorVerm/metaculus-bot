@@ -29,7 +29,9 @@ those words.
 
 Repository variables: `BOT_LIVE` (`true` publishes and enables the schedule), `BOT_RESEARCHER`
 (optional override of the research source). Secrets: `METACULUS_TOKEN`, `OPENROUTER_API_KEY`,
-and `ASKNEWS_CLIENT_ID` with `ASKNEWS_SECRET` when granted.
+and `ASKNEWS_CLIENT_ID` with `ASKNEWS_SECRET` when granted. `OPENROUTER_API_KEY` must be the key
+Metaculus donates and no other key; it is unset until that key
+arrives.
 
 GitHub switches scheduled workflows off after 60 days without a commit, and a fork starts with
 them off; check the Actions tab if runs stop.
