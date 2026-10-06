@@ -1,4 +1,4 @@
-"""Entry point of our bot: the template's bot, with one forecast per model and extra research.
+"""Entry point of our bot: the template's bot, with one forecast per model.
 
 `main.py` stays as upstream ships it. This file subclasses its bot and overrides only what
 differs, so upstream fixes to prompts and parsing keep arriving through merges.
@@ -12,21 +12,11 @@ import logging
 import os
 import sys
 
-from bot import cdf_check, config, credits, fetch, prompts, research, slots, timebudget
+from bot import config, credits, slots, timebudget
 from main import FallTemplateBot2026  # also silences noisy dependencies and loads .env
 
 from bot_helpers import check_environment, print_run_summary_banner, print_startup_banner
-from forecasting_tools import (
-    BinaryQuestion,
-    DateQuestion,
-    GeneralLlm,
-    MetaculusClient,
-    MetaculusQuestion,
-    MultipleChoiceQuestion,
-    NumericDistribution,
-    NumericQuestion,
-    ReasonedPrediction,
-)
+from forecasting_tools import GeneralLlm, MetaculusClient, MetaculusQuestion, ReasonedPrediction
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +25,6 @@ TOURNAMENT_URLS = {
     "minibench": f"https://www.metaculus.com/tournament/{config.MINIBENCH_TOURNAMENT}/",
     "test_questions": f"https://www.metaculus.com/tournament/{config.TEST_TOURNAMENT}/",
 }
-
-
-def _question_kind(question: MetaculusQuestion) -> prompts.QuestionKind:
-    if isinstance(question, BinaryQuestion):
-        return "binary"
-    if isinstance(question, MultipleChoiceQuestion):
-        return "multiple_choice"
-    if isinstance(question, NumericQuestion):
-        return "numeric"
-    if isinstance(question, DateQuestion):
-        return "date"
-    return "other"
 
 
 def _question_key(question: MetaculusQuestion) -> object:
@@ -60,12 +38,6 @@ class MedianBot(FallTemplateBot2026):
         super().__init__(predictions_per_research_report=len(forecasters), **kwargs)
         self._forecasters = forecasters
         self._slot_assigner = slots.SlotAssigner()
-        self._fast_questions: set[object] = set()
-        self.cdf_check_failures = 0
-
-    def mark_fast(self, question: MetaculusQuestion) -> None:
-        """This question closes soon: skip the optional page fetches."""
-        self._fast_questions.add(_question_key(question))
 
     # --- one model per forecast slot ---
 
@@ -95,56 +67,14 @@ class MedianBot(FallTemplateBot2026):
 
     async def run_research(self, question: MetaculusQuestion) -> str:
         try:
-            base = await super().run_research(question)
+            return await super().run_research(question)
         except Exception as error:  # noqa: BLE001 - a failed source must not forfeit the question
             logger.warning(f"RESEARCH_FAILED for {question.page_url}: {type(error).__name__}")
-            base = ""
-        parts = [
-            prompts.window_block(
-                question.open_time, question.close_time, question.scheduled_resolution_time
-            ),
-            base,
-        ]
-        if _question_key(question) not in self._fast_questions:
-            try:
-                parts.append(
-                    await asyncio.to_thread(
-                        research.resolution_source_block,
-                        question.resolution_criteria,
-                        question.fine_print,
-                        fetch.fetch_text,
-                    )
-                )
-            except Exception as error:  # noqa: BLE001 - the page fetch is optional
-                logger.warning(f"SOURCE_PAGES_FAILED for {question.page_url}: {type(error).__name__}")
-        return "\n\n".join(part for part in parts if part)
-
-    # --- prompt rules ---
-
-    def _get_conditional_disclaimer_if_necessary(self, question: MetaculusQuestion) -> str:
-        # Every template prompt places this text just before its final-answer instructions,
-        # which is where the rules belong. Appending here adds them without copying the prompts.
-        disclaimer = super()._get_conditional_disclaimer_if_necessary(question)
-        return f"{disclaimer}\n\n{prompts.rules_for(_question_kind(question))}\n"
-
-    # --- check the final distribution ---
+            return ""
 
     async def _aggregate_predictions(self, predictions, question):  # type: ignore[override]
-        aggregate = await super()._aggregate_predictions(predictions, question)
         self._slot_assigner.forget(_question_key(question))
-        if isinstance(aggregate, NumericDistribution):
-            problems = cdf_check.check_cdf(
-                [point.percentile for point in aggregate.get_cdf()],
-                aggregate.open_lower_bound,
-                aggregate.open_upper_bound,
-                aggregate.cdf_size or cdf_check.DEFAULT_POINTS,
-            )
-            if problems:
-                self.cdf_check_failures += 1
-                logger.error(f"CDF_CHECK_FAIL for {question.page_url}: {problems}")
-            else:
-                logger.info(f"CDF_CHECK_OK for {question.page_url}")
-        return aggregate
+        return await super()._aggregate_predictions(predictions, question)
 
 
 def build_forecasters(lineup: credits.Lineup) -> list[GeneralLlm]:
@@ -189,18 +119,15 @@ def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> M
 
 
 def select_questions(bot: MedianBot, questions: list[MetaculusQuestion], limit: int | None):
-    """Drop questions that close too soon, mark the ones that get the fast path, apply the cap."""
+    """Drop questions that close too soon to forecast, then apply the cap."""
     if bot.skip_previously_forecasted_questions:
         # Filter here as well as in the framework, so the cap counts only questions still to do.
         questions = [q for q in questions if not q.already_forecasted]
     kept = []
     for question in questions:
-        plan = timebudget.plan_for(timebudget.seconds_until(question.close_time))
-        if plan == "skip":
+        if timebudget.too_late(timebudget.seconds_until(question.close_time)):
             logger.warning(f"SKIPPED_TOO_LATE {question.page_url}")
             continue
-        if plan == "fast":
-            bot.mark_fast(question)
         kept.append(question)
     return kept if limit is None else kept[:limit]
 
@@ -273,10 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         reports, will_publish=publish, tournament_url=TOURNAMENT_URLS.get(args.mode)
     )
     failed = sum(isinstance(report, BaseException) for report in reports)
-    logger.info(
-        f"RUN_SUMMARY questions={len(reports)} failed={failed} "
-        f"cdf_check_failures={bot.cdf_check_failures}"
-    )
+    logger.info(f"RUN_SUMMARY questions={len(reports)} failed={failed}")
     return 1 if failed else 0
 
 

@@ -2,6 +2,14 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## Build our own; take only what did not work, 2026-10-06
+**Decision (owner):** Drop everything adopted from the other entrant's bot and build our
+own; keep only its record of what did not work. All four adopted pieces go. **Why:** not stated. **Rejected:** keeping the adopted pieces as plain engineering; keeping
+them switched off. **Binds:** the prompt rules, the question-dates block, reading of linked
+pages and the distribution check are removed. `docs/design/avoid.md` is the one thing kept from
+that bot. This replaces the "learn from the winner" half of the entry "Start from the
+template, learn from the winner"; starting from the template stands.
+
 ## No Google model, 2026-10-06
 **Decision (owner):** No Google model is used. **Why:** not stated. **Rejected:**
 a third forecast from a Google model, as the bot we learned from uses. **Binds:** the line-up

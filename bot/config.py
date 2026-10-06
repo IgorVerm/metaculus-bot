@@ -36,14 +36,10 @@ RESEARCHER_ENV = "BOT_RESEARCHER"
 FULL_LINEUP_MIN_USD = 5.0  # below this, forecast with the first model only
 STOP_BELOW_USD = 1.0  # below this, publish nothing and fail the run
 
-# Seconds until a question closes.
-FULL_PIPELINE_MIN_SECONDS = 1800  # below this, skip the optional page fetches
-SKIP_BELOW_SECONDS = 300  # below this, the forecast cannot land before close
+# A question closing sooner than this is skipped: the forecast could not land in time.
+# Our own estimate of one question's run time; measure it on the first runs and adjust.
+SKIP_BELOW_SECONDS = 300
 
 # A run that does not publish forecasts at most this many questions unless told otherwise,
 # because unpublished questions stay "open" and would be forecast again on every run.
 DRY_RUN_DEFAULT_MAX_QUESTIONS = 3
-
-# Resolution-source pages.
-MAX_SOURCE_PAGES = 2
-MAX_CHARS_PER_PAGE = 6000

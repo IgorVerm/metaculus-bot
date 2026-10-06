@@ -1,11 +1,8 @@
-"""Decide how much of the pipeline a question gets, from the time left until it closes."""
+"""Decide whether a question still has time for a forecast before it closes."""
 
 from datetime import datetime, timezone
-from typing import Literal
 
 from bot import config
-
-Plan = Literal["full", "fast", "skip"]
 
 
 def seconds_until(close_time: datetime | None, now: datetime | None = None) -> float | None:
@@ -18,12 +15,6 @@ def seconds_until(close_time: datetime | None, now: datetime | None = None) -> f
     return (close_time - now).total_seconds()
 
 
-def plan_for(seconds_to_close: float | None) -> Plan:
-    """An unknown close time gets the full pipeline: forfeiting a question costs more than a late try."""
-    if seconds_to_close is None:
-        return "full"
-    if seconds_to_close < config.SKIP_BELOW_SECONDS:
-        return "skip"
-    if seconds_to_close < config.FULL_PIPELINE_MIN_SECONDS:
-        return "fast"
-    return "full"
+def too_late(seconds_to_close: float | None) -> bool:
+    """An unknown close time is not too late: forfeiting a question costs more than a late try."""
+    return seconds_to_close is not None and seconds_to_close < config.SKIP_BELOW_SECONDS

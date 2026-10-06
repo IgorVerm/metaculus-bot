@@ -5,14 +5,15 @@ Checked on 2026-10-06.
 ## State
 - Public fork of `Metaculus/metac-bot-template`. Our bot is `run_bot.py` plus the modules in
   `bot/`; the upstream files are unchanged.
-- The first build exists and its unit tests pass. It has never run against Metaculus or a
+- The bot is the template's method with three forecasts from two vendors and our safety layer.
+  Everything adopted from another entrant's bot was removed by project decision; the replacement
+  forecasting method awaits the owner's design decision.
+- Unit tests pass and the bot builds on a runner. It has never run against Metaculus or a
   model: the repository has no secrets yet (issue #4, the owner's steps).
 - Not verified until that first run: the model names resolve on the donated key, the
-  `reasoning` setting is accepted, the fallback researcher is allowed on the donated key, and
-  the distribution check agrees with the server.
+  `reasoning` setting is accepted, and the fallback researcher is allowed on the donated key.
 - Nothing publishes. The repository variable `BOT_LIVE` is unset, so scheduled runs are skipped
   and manual runs are dry runs. Switching it on is issue #6, the owner's decision.
-- Next: issue #5 (test-area run, then dry runs on live questions).
 
 ## Build, test, run
 ```bash
@@ -23,8 +24,8 @@ gh workflow run run_main.yaml                  # dry run on the main tournament,
 gh workflow run run_minibench.yaml             # dry run on MiniBench, three questions
 gh run list --workflow run_main.yaml --json createdAt,event,conclusion   # delivery of scheduled runs
 ```
-A run prints `CREDIT_REMAINING`, `QUESTIONS_SELECTED`, `CDF_CHECK_OK` or `CDF_CHECK_FAIL`, and
-`RUN_SUMMARY`; search the run log for those words.
+A run prints `CREDIT_REMAINING`, `QUESTIONS_SELECTED` and `RUN_SUMMARY`; search the run log for
+those words.
 
 Repository variables: `BOT_LIVE` (`true` publishes and enables the schedule), `BOT_RESEARCHER`
 (optional override of the research source). Secrets: `METACULUS_TOKEN`, `OPENROUTER_API_KEY`,
@@ -38,6 +39,7 @@ them off; check the Actions tab if runs stop.
 |---|---|
 | Any change | `AGENTS.md`, then the issue |
 | How the bot forecasts and why | `docs/design/bot.md` |
+| A new forecasting idea | `docs/design/avoid.md` first |
 | Why a choice was made | `DESIGN_DECISIONS.md` |
 | Tournament rules and setup | `README.md` (upstream) and https://www.metaculus.com/futureeval/participate/ |
 
