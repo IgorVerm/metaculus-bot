@@ -4,12 +4,20 @@ Model names are checked against the live OpenRouter list (https://openrouter.ai/
 before a line-up change; last checked 2026-10-06.
 """
 
-# One forecaster per vendor; the published forecast is the median of their answers.
-# "reasoning" is passed through to the provider. The Google slot runs at provider defaults.
+# Tournaments, by the name in their Metaculus address. The framework's own "current
+# tournament" constant lags a season in the pinned version, so the names are stated here.
+# Update MAIN_TOURNAMENT at the start of each season (January, May, September).
+MAIN_TOURNAMENT = "fall-futureeval-2026"
+MINIBENCH_TOURNAMENT = "minibench"
+TEST_TOURNAMENT = "bot-testing-area"
+
+# Three forecasts per question; the published forecast is their median. Two vendors, with a
+# second, independent answer from the first (no Google model: DESIGN_DECISIONS.md).
+# "reasoning" is passed through to the provider.
 FORECASTERS: tuple[dict, ...] = (
     {"model": "openrouter/openai/gpt-6.1-sol", "reasoning": {"effort": "high"}},
     {"model": "openrouter/anthropic/claude-opus-5.5", "reasoning": {"effort": "high"}},
-    {"model": "openrouter/google/gemini-3.1-pro-preview"},
+    {"model": "openrouter/openai/gpt-6.1-sol", "reasoning": {"effort": "high"}},
 )
 FORECASTER_TIMEOUT_SECONDS = 480
 FORECASTER_TRIES = 2
@@ -31,6 +39,10 @@ STOP_BELOW_USD = 1.0  # below this, publish nothing and fail the run
 # Seconds until a question closes.
 FULL_PIPELINE_MIN_SECONDS = 1800  # below this, skip the optional page fetches
 SKIP_BELOW_SECONDS = 300  # below this, the forecast cannot land before close
+
+# A run that does not publish forecasts at most this many questions unless told otherwise,
+# because unpublished questions stay "open" and would be forecast again on every run.
+DRY_RUN_DEFAULT_MAX_QUESTIONS = 3
 
 # Resolution-source pages.
 MAX_SOURCE_PAGES = 2

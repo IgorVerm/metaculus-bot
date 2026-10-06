@@ -31,9 +31,9 @@ from forecasting_tools import (
 logger = logging.getLogger(__name__)
 
 TOURNAMENT_URLS = {
-    "main": "https://www.metaculus.com/tournament/fall-futureeval-2026/",
-    "minibench": "https://www.metaculus.com/tournament/minibench/",
-    "test_questions": "https://www.metaculus.com/tournament/bot-testing-area/",
+    "main": f"https://www.metaculus.com/tournament/{config.MAIN_TOURNAMENT}/",
+    "minibench": f"https://www.metaculus.com/tournament/{config.MINIBENCH_TOURNAMENT}/",
+    "test_questions": f"https://www.metaculus.com/tournament/{config.TEST_TOURNAMENT}/",
 }
 
 
@@ -106,14 +106,17 @@ class MedianBot(FallTemplateBot2026):
             base,
         ]
         if _question_key(question) not in self._fast_questions:
-            parts.append(
-                await asyncio.to_thread(
-                    research.resolution_source_block,
-                    question.resolution_criteria,
-                    question.fine_print,
-                    fetch.fetch_text,
+            try:
+                parts.append(
+                    await asyncio.to_thread(
+                        research.resolution_source_block,
+                        question.resolution_criteria,
+                        question.fine_print,
+                        fetch.fetch_text,
+                    )
                 )
-            )
+            except Exception as error:  # noqa: BLE001 - the page fetch is optional
+                logger.warning(f"SOURCE_PAGES_FAILED for {question.page_url}: {type(error).__name__}")
         return "\n\n".join(part for part in parts if part)
 
     # --- prompt rules ---
@@ -227,7 +230,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     check_environment(strict=True)
-    publish = os.environ.get("BOT_PUBLISH") == "true" and not args.dry_run
+    publish_setting = os.environ.get("BOT_PUBLISH", "")
+    if publish_setting not in ("", "true", "false"):
+        # Refuse before spending anything: a near-miss such as "True" would otherwise run
+        # unpublished on every schedule tick and forecast the same questions again each time.
+        logger.error('BOT_PUBLISH must be "true", "false" or unset. Nothing was run.')
+        return 1
+    publish = publish_setting == "true" and not args.dry_run
     print_startup_banner(args.mode, will_publish=publish)
 
     remaining = None
@@ -247,12 +256,15 @@ def main(argv: list[str] | None = None) -> int:
         questions = [client.get_question_by_post_id(post_id) for post_id in args.only_posts]
     else:
         tournament = {
-            "main": client.CURRENT_AI_COMPETITION_ID,
-            "minibench": client.CURRENT_MINIBENCH_ID,
-            "test_questions": "bot-testing-area",
+            "main": config.MAIN_TOURNAMENT,
+            "minibench": config.MINIBENCH_TOURNAMENT,
+            "test_questions": config.TEST_TOURNAMENT,
         }[args.mode]
         questions = client.get_all_open_questions_from_tournament(tournament)
-    questions = select_questions(bot, list(questions), args.max_questions)
+    limit = args.max_questions
+    if limit is None and not publish and not args.only_posts:
+        limit = config.DRY_RUN_DEFAULT_MAX_QUESTIONS
+    questions = select_questions(bot, list(questions), limit)
     logger.info(f"QUESTIONS_SELECTED {len(questions)}")
 
     reports = asyncio.run(bot.forecast_questions(questions, return_exceptions=True))

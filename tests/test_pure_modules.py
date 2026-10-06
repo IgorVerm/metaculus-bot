@@ -1,8 +1,11 @@
 """Tests for the standard-library modules in bot/. Run: python3 -m unittest discover -s tests"""
 
 import asyncio
+import email.message
+import http.client
 import io
 import unittest
+import urllib.error
 from datetime import datetime, timedelta, timezone
 
 from bot import cdf_check, config, credits, fetch, prompts, research, slots, timebudget
@@ -104,6 +107,47 @@ def _resolver(*addresses):
     return resolve
 
 
+PUBLIC = _resolver("93.184.215.14")
+
+
+class _Reply(io.BytesIO):
+    def __init__(self, body, content_type, encoding=None):
+        super().__init__(body)
+        self.headers = email.message.Message()
+        self.headers["Content-Type"] = content_type
+        if encoding:
+            self.headers["Content-Encoding"] = encoding
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def _redirect(url, location):
+    headers = email.message.Message()
+    headers["Location"] = location
+    return urllib.error.HTTPError(url, 302, "Found", headers, None)
+
+
+class _Opener:
+    """Stands in for the network: maps a URL to a reply, or raises what it is given."""
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.opened = []
+
+    def open(self, request, timeout):
+        self.opened.append(request.full_url)
+        page = self.pages.get(request.full_url)
+        if page is None:
+            raise http.client.IncompleteRead(b"")
+        if isinstance(page, Exception):
+            raise page
+        return page
+
+
 class FetchGuardTest(unittest.TestCase):
     def test_public_address_is_allowed(self):
         self.assertIsNone(fetch.refusal_reason("https://example.org/page", _resolver("93.184.215.14")))
@@ -131,8 +175,63 @@ class FetchGuardTest(unittest.TestCase):
 
         self.assertIsNotNone(fetch.refusal_reason("https://nope.invalid/", failing))
 
+    def test_cloud_internal_address_is_refused(self):
+        self.assertIsNotNone(fetch.refusal_reason("http://wire/", _resolver("168.63.129.16")))
+
+    def test_malformed_url_is_refused_not_raised(self):
+        self.assertIsNotNone(fetch.refusal_reason("https://[redacted]/page", PUBLIC))
+
     def test_refused_url_is_never_opened(self):
-        self.assertIsNone(fetch.fetch_text("http://intranet/", _resolver("10.0.0.5")))
+        opener = _Opener({})
+        self.assertIsNone(fetch.fetch_text("http://intranet/", _resolver("10.0.0.5"), opener))
+        self.assertEqual(opener.opened, [])
+
+    def test_page_text_is_returned(self):
+        opener = _Opener({"https://a.example/": _Reply(b"<p>Rate: 4.1%</p>", "text/html; charset=utf-8")})
+        self.assertEqual(fetch.fetch_text("https://a.example/", PUBLIC, opener), "Rate: 4.1%")
+
+    def test_redirect_target_is_checked_again(self):
+        def resolver(host, port):
+            address = "10.0.0.5" if host == "inside.example" else "93.184.215.14"
+            return [(None, None, None, "", (address, 0))]
+
+        opener = _Opener({"https://a.example/": _redirect("https://a.example/", "http://inside.example/x")})
+        self.assertIsNone(fetch.fetch_text("https://a.example/", resolver, opener))
+        self.assertEqual(opener.opened, ["https://a.example/"])
+
+    def test_redirect_to_public_page_is_followed(self):
+        opener = _Opener({
+            "https://a.example/": _redirect("https://a.example/", "/moved"),
+            "https://a.example/moved": _Reply(b"moved text", "text/plain"),
+        })
+        self.assertEqual(fetch.fetch_text("https://a.example/", PUBLIC, opener), "moved text")
+
+    def test_redirect_loop_ends(self):
+        opener = _Opener({"https://a.example/": _redirect("https://a.example/", "https://a.example/")})
+        self.assertIsNone(fetch.fetch_text("https://a.example/", PUBLIC, opener))
+        self.assertEqual(len(opener.opened), fetch.MAX_REDIRECTS + 1)
+
+    def test_non_text_and_compressed_replies_are_dropped(self):
+        pdf = _Opener({"https://a.example/": _Reply(b"%PDF", "application/pdf")})
+        self.assertIsNone(fetch.fetch_text("https://a.example/", PUBLIC, pdf))
+        gz = _Opener({"https://a.example/": _Reply(b"\x1f\x8b", "text/html", encoding="gzip")})
+        self.assertIsNone(fetch.fetch_text("https://a.example/", PUBLIC, gz))
+
+    def test_unknown_charset_does_not_raise(self):
+        opener = _Opener({"https://a.example/": _Reply(b"plain words", "text/plain; charset=utf8mb4")})
+        self.assertEqual(fetch.fetch_text("https://a.example/", PUBLIC, opener), "plain words")
+
+    def test_size_cap(self):
+        opener = _Opener({"https://a.example/": _Reply(b"a" * (fetch.MAX_BYTES + 5000), "text/plain")})
+        self.assertEqual(len(fetch.fetch_text("https://a.example/", PUBLIC, opener)), fetch.MAX_BYTES)
+
+    def test_slow_page_is_abandoned_at_the_deadline(self):
+        ticks = iter(range(0, 10_000, 20))  # every look at the clock is 20 seconds later
+        opener = _Opener({"https://a.example/": _Reply(b"a" * 100_000, "text/plain")})
+        self.assertIsNone(fetch.fetch_text("https://a.example/", PUBLIC, opener, clock=lambda: next(ticks)))
+
+    def test_broken_connection_does_not_raise(self):
+        self.assertIsNone(fetch.fetch_text("https://a.example/", PUBLIC, _Opener({})))
 
     def test_html_to_text_drops_scripts_and_styles(self):
         html = "<html><head><title>T</title><style>p{}</style></head><body><p>Hello <b>world</b></p><script>steal()</script></body></html>"
@@ -146,6 +245,18 @@ class ResearchTest(unittest.TestCase):
             research.extract_urls(text, None),
             ["https://www.bls.gov/cpi/", "https://fred.stlouisfed.org/series/CPIAUCSL"],
         )
+
+    def test_malformed_url_is_skipped(self):
+        self.assertEqual(
+            research.extract_urls("see https://[redacted]/page and https://ok.example/x"),
+            ["https://ok.example/x"],
+        )
+
+    def test_a_failing_fetch_skips_the_page(self):
+        def failing(url):
+            raise RuntimeError("boom")
+
+        self.assertEqual(research.resolution_source_block("https://a.example/", None, failing), "")
 
     def test_duplicates_count_once(self):
         self.assertEqual(research.extract_urls("https://a.example/x https://a.example/x"), ["https://a.example/x"])
@@ -205,6 +316,25 @@ class SlotsTest(unittest.TestCase):
 
         self.assertEqual(sorted(asyncio.run(run())), lineup)
         self.assertIsNone(slots.active_model())
+
+
+class ConfigTest(unittest.TestCase):
+    def test_models_go_through_openrouter_only(self):
+        # Another route (for example the framework's Metaculus proxy) would put its
+        # credential into the model settings that the bot publishes with each forecast.
+        names = [spec["model"] for spec in config.FORECASTERS]
+        names += [config.PARSER_MODEL, config.SUMMARIZER_MODEL, config.RESEARCHER_WITHOUT_ASKNEWS]
+        for name in names:
+            self.assertTrue(name.startswith("openrouter/"), name)
+
+    def test_no_google_model(self):
+        for spec in config.FORECASTERS:
+            self.assertNotIn("google", spec["model"])
+
+    def test_three_forecasts_from_two_vendors(self):
+        vendors = {spec["model"].split("/")[1] for spec in config.FORECASTERS}
+        self.assertEqual(len(config.FORECASTERS), 3)
+        self.assertEqual(len(vendors), 2)
 
 
 if __name__ == "__main__":

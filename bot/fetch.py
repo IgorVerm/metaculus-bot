@@ -9,6 +9,7 @@ again by the connection, so a host that changes its answer in between is not cau
 
 import ipaddress
 import socket
+import time
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
@@ -19,7 +20,11 @@ USER_AGENT = "metaculus-bot (+https://github.com/IgorVerm/metaculus-bot)"
 ALLOWED_PORTS = {80, 443}
 MAX_BYTES = 400_000
 MAX_REDIRECTS = 3
-TIMEOUT_SECONDS = 10
+TIMEOUT_SECONDS = 10  # per network operation
+TOTAL_SECONDS = 30  # for one page, redirects included
+CHUNK_BYTES = 16_384
+# Public by the address rules, but the cloud provider's internal service on GitHub's runners.
+REFUSED_ADDRESSES = {"168.63.129.16"}
 TEXT_TYPES = ("text/", "application/json", "application/xml", "application/xhtml+xml")
 SKIPPED_TAGS = {"script", "style", "noscript", "template", "svg", "head"}
 
@@ -28,7 +33,11 @@ Resolver = Callable[..., list]
 
 def refusal_reason(url: str, resolver: Resolver = socket.getaddrinfo) -> str | None:
     """Why this URL must not be fetched, or None when it may be."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return "malformed URL"
     if parts.scheme not in ("http", "https"):
         return "scheme is not http or https"
     if parts.username or parts.password:
@@ -36,10 +45,6 @@ def refusal_reason(url: str, resolver: Resolver = socket.getaddrinfo) -> str | N
     host = parts.hostname
     if not host:
         return "no host"
-    try:
-        port = parts.port or (443 if parts.scheme == "https" else 80)
-    except ValueError:
-        return "invalid port"
     if port not in ALLOWED_PORTS:
         return f"port {port} is not allowed"
     try:
@@ -49,8 +54,11 @@ def refusal_reason(url: str, resolver: Resolver = socket.getaddrinfo) -> str | N
     if not answers:
         return "host does not resolve"
     for answer in answers:
-        address = ipaddress.ip_address(answer[4][0].split("%")[0])
-        if not address.is_global or address.is_multicast:
+        try:
+            address = ipaddress.ip_address(answer[4][0].split("%")[0])
+        except ValueError:
+            return "host resolves to an unreadable address"
+        if not address.is_global or address.is_multicast or str(address) in REFUSED_ADDRESSES:
             return "host resolves to a non-public address"
     return None
 
@@ -86,28 +94,47 @@ def html_to_text(html: str) -> str:
     return " ".join(" ".join(extractor.chunks).split())
 
 
-def fetch_text(url: str, resolver: Resolver = socket.getaddrinfo) -> str | None:
-    """The page's text, or None when it is refused, unreachable or not text."""
-    opener = urllib.request.build_opener(_NoRedirect)
+def fetch_text(
+    url: str,
+    resolver: Resolver = socket.getaddrinfo,
+    opener: urllib.request.OpenerDirector | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> str | None:
+    """The page's text, or None when it is refused, unreachable, too slow or not plain text."""
+    opener = opener or urllib.request.build_opener(_NoRedirect)
+    deadline = clock() + TOTAL_SECONDS
     for _ in range(MAX_REDIRECTS + 1):
         if refusal_reason(url, resolver):
             return None
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        request = urllib.request.Request(
+            url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"}
+        )
         try:
             with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
                 content_type = response.headers.get("Content-Type", "").lower()
-                if not content_type.startswith(TEXT_TYPES):
+                encoding = response.headers.get("Content-Encoding", "identity").lower()
+                if not content_type.startswith(TEXT_TYPES) or encoding != "identity":
                     return None
-                raw = response.read(MAX_BYTES)
+                raw = b""
+                while len(raw) < MAX_BYTES:
+                    if clock() > deadline:
+                        return None
+                    chunk = response.read(min(CHUNK_BYTES, MAX_BYTES - len(raw)))
+                    if not chunk:
+                        break
+                    raw += chunk
                 charset = response.headers.get_content_charset() or "utf-8"
         except urllib.error.HTTPError as error:
             location = error.headers.get("Location") if error.headers else None
-            if error.code in (301, 302, 303, 307, 308) and location:
+            if error.code in (301, 302, 303, 307, 308) and location and clock() <= deadline:
                 url = urljoin(url, location)
                 continue
             return None
-        except (OSError, ValueError):
+        except Exception:  # noqa: BLE001 - any network or protocol failure means "no page"
             return None
-        text = raw.decode(charset, errors="replace")
+        try:
+            text = raw.decode(charset, errors="replace")
+        except LookupError:  # the page named a character set Python does not know
+            text = raw.decode("utf-8", errors="replace")
         return html_to_text(text) if "html" in content_type else " ".join(text.split())
     return None

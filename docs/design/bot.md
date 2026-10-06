@@ -9,7 +9,8 @@ building of numeric distributions, is the template and the `forecasting-tools` f
 The framework runs a fixed number of forecasts per question and asks for "the default model"
 inside each. `MedianBot._make_prediction` gives each forecast a slot number and binds that
 slot's model to the running task (`bot/slots.py`); `MedianBot.get_llm` returns the bound model.
-The line-up is in `bot/config.py`: one flagship model each from three vendors.
+The line-up is in `bot/config.py`: three forecasts from two vendors' flagship models, the first
+vendor answering twice, independently.
 
 The framework then aggregates: the median for binary questions, the pointwise median of the
 distributions for numeric and date questions, the mean per option for multiple choice. We keep
@@ -31,7 +32,8 @@ Page text comes from addresses that question authors choose. `bot/fetch.py` ther
 only http and https on ports 80 and 443, refuses any host that resolves to a non-public
 address, follows redirects by hand so each hop is checked again, caps size and time, and keeps
 only visible text. The text is handed to the models under a heading that says it is source
-material and not an instruction. It cannot reach anything except the models' prompts.
+material and not an instruction. It reaches the models' prompts and, as part of the research,
+the private comment the bot posts on Metaculus; nothing else.
 
 ## Prompt rules
 

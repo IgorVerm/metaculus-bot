@@ -16,7 +16,10 @@ def extract_urls(*texts: str | None, limit: int = config.MAX_SOURCE_PAGES) -> li
     for text in texts:
         for match in _URL.findall(text or ""):
             url = match.rstrip(".,;:!?")
-            host = (urlsplit(url).hostname or "").lower()
+            try:
+                host = (urlsplit(url).hostname or "").lower()
+            except ValueError:  # malformed, e.g. an unclosed bracket
+                continue
             if not host or host.endswith(_SKIPPED_HOST_SUFFIXES) or url in found:
                 continue
             found.append(url)
@@ -36,7 +39,10 @@ def resolution_source_block(
     """
     sections = []
     for url in extract_urls(resolution_criteria, fine_print):
-        text = fetch(url)
+        try:
+            text = fetch(url)
+        except Exception:  # noqa: BLE001 - an unreadable page is skipped, never fatal
+            text = None
         if text:
             sections.append(f"### {url}\n{text[: config.MAX_CHARS_PER_PAGE]}")
     if not sections:
