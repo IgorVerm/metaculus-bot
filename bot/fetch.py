@@ -58,6 +58,8 @@ def refusal_reason(url: str, resolver: Resolver = socket.getaddrinfo) -> str | N
             address = ipaddress.ip_address(answer[4][0].split("%")[0])
         except ValueError:
             return "host resolves to an unreadable address"
+        # An IPv4 address written in IPv6 form is judged as the IPv4 address it stands for.
+        address = getattr(address, "ipv4_mapped", None) or address
         if not address.is_global or address.is_multicast or str(address) in REFUSED_ADDRESSES:
             return "host resolves to a non-public address"
     return None
@@ -119,7 +121,9 @@ def fetch_text(
                 while len(raw) < MAX_BYTES:
                     if clock() > deadline:
                         return None
-                    chunk = response.read(min(CHUNK_BYTES, MAX_BYTES - len(raw)))
+                    # read1 returns what has arrived; read would wait for the full amount and
+                    # let a slow server hold the call far past the deadline.
+                    chunk = response.read1(min(CHUNK_BYTES, MAX_BYTES - len(raw)))
                     if not chunk:
                         break
                     raw += chunk

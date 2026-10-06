@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       max_questions:
-        description: "Forecast at most this many questions (leave empty for all)"
+        description: "Forecast at most this many questions (empty: all when publishing, 3 otherwise)"
         default: "3"
   schedule:
     # Three separate entries, off the hour: GitHub drops scheduled runs under load.

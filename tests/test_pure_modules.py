@@ -178,6 +178,12 @@ class FetchGuardTest(unittest.TestCase):
     def test_cloud_internal_address_is_refused(self):
         self.assertIsNotNone(fetch.refusal_reason("http://wire/", _resolver("168.63.129.16")))
 
+    def test_ipv4_addresses_in_ipv6_form_are_judged_as_ipv4(self):
+        for address in ("::ffff:168.63.129.16", "::ffff:127.0.0.1", "::ffff:10.0.0.5"):
+            with self.subTest(address=address):
+                self.assertIsNotNone(fetch.refusal_reason("http://x/", _resolver(address)))
+        self.assertIsNone(fetch.refusal_reason("http://x/", _resolver("::ffff:93.184.215.14")))
+
     def test_malformed_url_is_refused_not_raised(self):
         self.assertIsNotNone(fetch.refusal_reason("https://[redacted]/page", PUBLIC))
 

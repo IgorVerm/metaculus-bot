@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       max_questions:
-        description: "Forecast at most this many questions (leave empty for all)"
+        description: "Forecast at most this many questions (empty: all when publishing, 3 otherwise)"
         default: "3"
 
 permissions:
