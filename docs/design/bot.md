@@ -71,7 +71,8 @@ answer. There is one second look per model per question.
 Research runs once per framing and both models read it.
 
 - **Direct:** the template's research (AskNews when its credentials are set, otherwise the
-  search model). Other question types use this same research.
+  search model, built with the same time limit as our own requests). Other question types use
+  this same research.
 - **Reversed:** a request to the search model (a cheap model with its vendor's web search,
   `SEARCH_MODEL` in `bot/config.py`) for reasons and evidence that the outcome will
   not happen.
@@ -102,8 +103,9 @@ Independent calls run side by side, and each failure is caught on its own. A rev
 structured answer that fails or cannot be parsed is left out. A framing whose research fails
 answers on the direct framing's research. A statement the parser refuses means no range, so
 only the tests that need no range run. A failed second look leaves the first answers in place.
-A reversed multiple-choice answer that does not name exactly the question's options is left
-out, because the framework combines only answers with the same option names. Each of these is
+A multiple-choice answer that does not name exactly the question's options is left out,
+because the framework combines only answers with the same option names; a second look with
+other names counts as failed. Each of these is
 logged as `FALLBACK`. A question fails only when no answer at all was produced.
 
 ### Where it hooks into the framework
@@ -147,8 +149,20 @@ first floor the full line-up runs; between the floors only the first model, with
 below the second floor the run publishes nothing and fails, so it shows red. An unreadable
 balance counts as unknown and keeps the full line-up.
 
-Before second looks, a yes/no question costs six flagship answers and three research runs, a
-multiple-choice question four and two. The cost per question is not measured yet.
+Calls per question with the full line-up; the worst case adds a second look for both models
+and the freshness retry. A parser sample is one call to the cheap parser model; every answer is
+parsed twice, the structured one once.
+
+| Question | Flagship answers | Search requests | Parser samples |
+|---|---|---|---|
+| Yes/no, normally | 6 | 3 | 10 |
+| Yes/no, at worst | 8 | 4 | 14 |
+| Multiple choice, normally | 4 | 2 | 8 |
+| Multiple choice, at worst | 6 | 3 | 12 |
+
+The cost per question is not measured yet. The stages of one question run in sequence
+(research, answers, second looks), and at the extremes their time limits add up to more than
+the 45-minute run step of the workflows, so the run time must be measured on the first runs.
 
 `bot/timebudget.py` drops a question that closes in under five minutes, because its forecast
 could not land. The five minutes is our estimate, to be replaced by a measured run time.

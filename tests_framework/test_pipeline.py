@@ -9,6 +9,7 @@ the JSON line each fixed text ends with.
 
 import asyncio
 import json
+import os
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -452,6 +453,103 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(len(result.predictions), 1)
         self.assertEqual(len(self.lines(log, "FALLBACK")), 1)
         self.assertEqual(self.lines(log, "SECOND_LOOK"), [])
+
+    def test_a_second_look_with_other_option_names_keeps_the_first_answers(self):
+        wrong_names = reply(
+            "Reasoning.",
+            {
+                "predicted_options": [
+                    {"option_name": name, "probability": value}
+                    for name, value in zip(["Rouge", "Bleu", "Vert"], [0.5, 0.4, 0.1])
+                ]
+            },
+        )
+        steady = forecaster(
+            "openrouter/stand-in/steady",
+            direct=option_list([0.6, 0.3, 0.1]),
+            reversed_=not_outcome([0.35, 0.65, 0.9]),
+        )
+        clashing = forecaster(
+            "openrouter/stand-in/clashing",
+            direct=option_list([0.6, 0.3, 0.1]),
+            reversed_=not_outcome([0.7, 0.4, 0.9]),
+            second_look=wrong_names,
+        )
+        # The clashing model first: its second look must not become the reference names.
+        result, log = self.run_method(build([clashing, steady]), choice_question())
+        self.assertEqual(len(result.predictions), 4)
+        for prediction in result.predictions:
+            self.assertEqual(list(prediction.prediction_value.to_dict()), OPTIONS)
+        self.assertAlmostEqual(result.predictions[0].prediction_value.to_dict()["Red"], 0.6)
+        self.assertEqual(self.lines(log, "SECOND_LOOK"), [])
+        fallbacks = self.lines(log, "FALLBACK")
+        self.assertEqual(len(fallbacks), 1)
+        self.assertIn("second look", fallbacks[0])
+        self.assertIn("second look: failed", result.research_report)
+
+    def test_the_questions_options_are_the_reference_names(self):
+        other_names = reply(
+            "Reasoning.",
+            {
+                "predicted_options": [
+                    {"option_name": name, "probability": value}
+                    for name, value in zip(["Rouge", "Bleu", "Vert"], [0.6, 0.3, 0.1])
+                ]
+            },
+        )
+        odd = forecaster(
+            "openrouter/stand-in/odd", direct=other_names, reversed_=not_outcome([0.4, 0.7, 0.9])
+        )
+        steady = forecaster(
+            "openrouter/stand-in/steady",
+            direct=option_list([0.6, 0.3, 0.1]),
+            reversed_=not_outcome([0.4, 0.7, 0.9]),
+        )
+        # The odd direct answer comes first and is the one left out; the three others combine.
+        result, log = self.run_method(build([odd, steady]), choice_question())
+        self.assertEqual(len(result.predictions), 3)
+        for prediction in result.predictions:
+            self.assertEqual(list(prediction.prediction_value.to_dict()), OPTIONS)
+        fallbacks = self.lines(log, "FALLBACK")
+        self.assertEqual(len(fallbacks), 1)
+        self.assertIn("direct answer of openrouter/stand-in/odd", fallbacks[0])
+
+        # When no answer names the question's options, the template's answers pass as they are.
+        alone = forecaster(
+            "openrouter/stand-in/odd", direct=other_names, reversed_=TimeoutError()
+        )
+        result, log = self.run_method(build([alone]), choice_question())
+        self.assertEqual(len(result.predictions), 1)
+        self.assertEqual(
+            list(result.predictions[0].prediction_value.to_dict()), ["Rouge", "Bleu", "Vert"]
+        )
+
+    def test_the_researcher_gets_the_search_models_time_limit(self):
+        asknews = ("ASKNEWS_CLIENT_ID", "ASKNEWS_SECRET", "ASKNEWS_API_KEY")
+        clean = {k: v for k, v in os.environ.items() if k not in asknews + (config.RESEARCHER_ENV,)}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            built = run_bot.build_researcher()
+            self.assertIsInstance(built, GeneralLlm)
+            self.assertEqual(built.model, config.SEARCH_MODEL)
+            self.assertEqual(built.litellm_kwargs["timeout"], config.SEARCH_TIMEOUT_SECONDS)
+            self.assertEqual(built.allowed_tries, config.SEARCH_TRIES)
+            self.assertEqual(run_bot.choose_researcher(), config.SEARCH_MODEL)
+            bot = run_bot.build_bot("full", publish=False, skip_forecasted=True)
+            self.assertIsInstance(bot.get_llm("researcher"), GeneralLlm)
+            self.assertEqual(
+                bot.get_llm("researcher").litellm_kwargs["timeout"], config.SEARCH_TIMEOUT_SECONDS
+            )
+            plain_name = "openrouter/stand-in/x:online"
+            with mock.patch.dict(os.environ, {config.RESEARCHER_ENV: plain_name}):
+                override = run_bot.build_researcher()
+                self.assertIsInstance(override, GeneralLlm)
+                self.assertEqual(override.model, plain_name)
+                self.assertEqual(override.litellm_kwargs["timeout"], config.SEARCH_TIMEOUT_SECONDS)
+            for name in ("asknews/deep-research/low-depth", "smart-searcher/x", "no_research"):
+                with mock.patch.dict(os.environ, {config.RESEARCHER_ENV: name}):
+                    self.assertEqual(run_bot.build_researcher(), name)
+            with mock.patch.dict(os.environ, {"ASKNEWS_API_KEY": "stand-in"}):
+                self.assertEqual(run_bot.build_researcher(), config.RESEARCHER_WITH_ASKNEWS)
 
     # --- the framework around our method ---
 

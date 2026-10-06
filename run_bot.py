@@ -622,17 +622,17 @@ class MedianBot(FallTemplateBot2026):
             options = answer.prediction.prediction_value.predicted_options
             return frozenset(option.option_name for option in options)
 
-        directs = [answer for answer in answers if answer.framing == framings.DIRECT]
-        reference = names(directs[0]) if directs else frozenset(run.text.options)
-        kept = []
+        reference = frozenset(run.text.options)
+        kept = [answer for answer in answers if names(answer) == reference]
+        if not kept:
+            # No answer names the question's options. Our own answers always do, so these are
+            # the template's direct answers, passed on as the template alone would pass them.
+            return answers
         for answer in answers:
-            ours = answer.framing != framings.DIRECT or answer.second_look
-            if ours and names(answer) != reference:
+            if names(answer) != reference:
                 self._fallback(
                     run, f"{answer.framing} answer of {answer.model.model}", "option names differ"
                 )
-                continue
-            kept.append(answer)
         return kept
 
     # --- our method: the check and the second look ---
@@ -751,6 +751,12 @@ class MedianBot(FallTemplateBot2026):
             prediction = await self._multiple_choice_prompt_to_forecast(run.question, prompt)
         finally:
             slots.release(token)
+        # It replaces a direct answer, so it must name exactly the question's options: a
+        # mismatch raises, and the caller keeps the first answers.
+        stated = prediction.prediction_value.to_dict()
+        framings.match_options(stated, list(run.text.options))
+        if set(stated) != set(run.text.options):
+            raise ValueError("the second look does not name the question's options")
         answer = self._options_answer(
             run,
             model,
@@ -783,9 +789,9 @@ def plain_slots(lineup: credits.Lineup) -> tuple[int, ...]:
     return config.PLAIN_FORECAST_SLOTS if lineup == "full" else (0,)
 
 
-def build_search_model() -> GeneralLlm:
+def build_search_model(name: str = config.SEARCH_MODEL) -> GeneralLlm:
     return GeneralLlm(
-        model=config.SEARCH_MODEL,
+        model=name,
         temperature=None,
         timeout=config.SEARCH_TIMEOUT_SECONDS,
         allowed_tries=config.SEARCH_TRIES,
@@ -800,6 +806,14 @@ def choose_researcher() -> str:
     if has_pair or os.environ.get("ASKNEWS_API_KEY"):
         return config.RESEARCHER_WITH_ASKNEWS
     return config.RESEARCHER_WITHOUT_ASKNEWS
+
+
+def build_researcher() -> str | GeneralLlm:
+    """The template's research source. A plain model name is built with the search model's
+    time limit and tries; given as a name, the template would build it with the framework's
+    short default time limit. AskNews and the other named sources stay names."""
+    name = choose_researcher()
+    return build_search_model(name) if freshness.from_search_model(name) else name
 
 
 def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> MedianBot:
@@ -817,7 +831,7 @@ def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> M
         llms={
             "default": build_forecasters("single")[0],
             "summarizer": config.SUMMARIZER_MODEL,
-            "researcher": choose_researcher(),
+            "researcher": build_researcher(),
             "parser": config.PARSER_MODEL,
         },
     )
