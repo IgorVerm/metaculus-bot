@@ -123,6 +123,9 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(len(set(vendors)), 2)
         self.assertEqual(vendors, ["openai", "anthropic", "openai"])
 
+    def test_research_without_asknews_uses_the_search_model(self):
+        self.assertEqual(config.RESEARCHER_WITHOUT_ASKNEWS, config.SEARCH_MODEL)
+
     def test_search_model_searches_and_is_from_a_vendor_the_key_serves(self):
         self.assertTrue(config.SEARCH_MODEL.endswith(":online"))
         self.assertIn(config.SEARCH_MODEL.split("/")[1], ("openai", "anthropic"))

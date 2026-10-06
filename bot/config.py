@@ -52,20 +52,20 @@ FORECASTER_TRIES = 2
 PARSER_MODEL = "openrouter/openai/gpt-6-luna"
 SUMMARIZER_MODEL = "openrouter/openai/gpt-6-luna"
 
-# Research. AskNews is free for tournament entrants once granted (1,000 calls a month, 4,000
-# for the tournament; the template's news search uses six calls per question). Without its
-# credentials the bot uses a model with its vendor's own web search, through the ":online"
-# suffix. The donated key serves only OpenAI, Anthropic and Google models, so the fallback
-# must be one of those. BOT_RESEARCHER overrides both.
-RESEARCHER_WITH_ASKNEWS = "asknews/news-summaries"
-RESEARCHER_WITHOUT_ASKNEWS = "openrouter/openai/gpt-6.1-sol:online"
-RESEARCHER_ENV = "BOT_RESEARCHER"
-
-# The search model for our own research requests (the reversed and structured framings and the
-# freshness retry): a cheap model with its vendor's web search. OpenAI or Anthropic only.
+# The search model: a cheap model with its vendor's own web search, through the ":online"
+# suffix. It answers our own research requests (the reversed and structured framings and the
+# freshness retry) and is the template's research source when AskNews is not available. The
+# donated key serves only OpenAI, Anthropic and Google models; ours is OpenAI or Anthropic.
 SEARCH_MODEL = "openrouter/openai/gpt-6-luna:online"
 SEARCH_TIMEOUT_SECONDS = 300
 SEARCH_TRIES = 2
+
+# The template's research. AskNews is free for tournament entrants once granted (1,000 calls a
+# month, 4,000 for the tournament; the template's news search uses six calls per question).
+# Without its credentials the search model does it. BOT_RESEARCHER overrides both.
+RESEARCHER_WITH_ASKNEWS = "asknews/news-summaries"
+RESEARCHER_WITHOUT_ASKNEWS = SEARCH_MODEL
+RESEARCHER_ENV = "BOT_RESEARCHER"
 
 # Research from a search model whose newest evidence is older than this, or undated, gets one
 # more search for the newest developments.

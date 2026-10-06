@@ -71,8 +71,9 @@ answer. There is one second look per model per question.
 Research runs once per framing and both models read it.
 
 - **Direct:** the template's research (AskNews when its credentials are set, otherwise the
-  search-backed model named in `bot/config.py`).
-- **Reversed:** a request to the search model for reasons and evidence that the outcome will
+  search model). Other question types use this same research.
+- **Reversed:** a request to the search model (a cheap model with its vendor's web search,
+  `SEARCH_MODEL` in `bot/config.py`) for reasons and evidence that the outcome will
   not happen.
 - **Structured:** a request to the search model for the current status of what the question
   depends on.

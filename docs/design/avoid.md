@@ -21,7 +21,9 @@ by us. Trying one of these again needs new evidence of our own.
 - The mean, the geometric mean of odds, averaging of quantiles, or a trimmed mean in place of
   the median.
 - Weighting models by past performance, or choosing models for diversity.
-- More than three forecasts. Six scored no better than three.
+- More than three forecasts. Six scored no better than three. Our six answers to a yes/no
+  question are three framings on two models, a different thing from six samples of the same
+  question; this was adopted on 2026-10-06 (`DESIGN_DECISIONS.md`).
 
 ## Extra reasoning steps
 - A critic pass that advises the forecasters.
