@@ -564,6 +564,7 @@ class LimitsTest(unittest.TestCase):
         )
         self.assertEqual(limits.worst_case_calls("plain")["flagship"], 3)
         self.assertEqual(limits.worst_case_calls("conditional")["flagship"], 12)
+        self.assertEqual(limits.worst_case_calls("conditional")["parser"], 24)
         with self.assertRaises(ValueError):
             limits.worst_case_calls("other")
 
@@ -600,6 +601,25 @@ class LimitsTest(unittest.TestCase):
         self.assertAlmostEqual(limits.worst_case_question_cost_usd("binary"), by_hand)
         self.assertAlmostEqual(
             limits.worst_case_run_cost_usd(), config.MAX_QUESTIONS_PER_RUN * by_hand
+        )
+
+    def test_conditional_bound_by_hand(self):
+        # Three forecasts (two on the first model) of four parts; part k reads the research and
+        # k earlier parts, each at most 4000 characters of reasoning and 2000 of frame.
+        self.assertEqual(config.APPENDED_REASONING_MAX_CHARS, 4000)
+        self.assertEqual(limits.template_research_max_chars(), 16000 + 3 * 6000)
+        tokens_in = sum((16000 + earlier * 6000) / 4 + 3000 for earlier in range(4))
+        flagship = 0.0
+        for forecasts, (price_in, price_out) in ((2, (2.0, 10.0)), (1, (4.0, 20.0))):
+            flagship += forecasts * 2 * (tokens_in * price_in + 4 * 12000 * price_out) / 1e6
+        search = 1 * 2 * (7000 * 0.10 + 6000 * 0.50) / 1e6
+        parser = 24 * 3 * 2 * ((12000 + 3000) * 0.10 + 4000 * 0.50) / 1e6
+        self.assertAlmostEqual(
+            limits.worst_case_question_cost_usd("conditional"), flagship + search + parser
+        )
+        self.assertGreater(
+            limits.worst_case_question_cost_usd("conditional"),
+            4 * limits.worst_case_question_cost_usd("plain"),
         )
 
     def test_a_run_stays_under_the_cost_ceiling(self):

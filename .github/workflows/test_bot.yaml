@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       max_questions:
-        description: "Forecast at most this many questions (empty: all when publishing, 3 otherwise)"
+        description: "Forecast at most this many questions; never more than the per-run cap in bot/config.py (empty: the cap when publishing, 3 otherwise)"
         default: "3"
 
 permissions:

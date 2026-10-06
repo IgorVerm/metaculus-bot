@@ -96,6 +96,13 @@ MAX_LOGGED_SOURCES = 60
 RESEARCH_MAX_CHARS = 16000
 RESEARCH_RETRY_MAX_CHARS = 5000
 QUOTED_ANSWER_MAX_CHARS = 4000
+# A conditional question is forecast in parts, and the template appends each earlier part's
+# forecast and reasoning to the research of the later ones. Each appended reasoning is cut to
+# APPENDED_REASONING_MAX_CHARS; APPENDED_FRAME_CHARS allows for the template's text around it
+# and the forecast value. At most CONDITIONAL_PARTS - 1 parts are appended.
+APPENDED_REASONING_MAX_CHARS = 4000
+APPENDED_FRAME_CHARS = 2000
+CONDITIONAL_PARTS = 4
 MAX_QUESTIONS_PER_RUN = 5
 
 # The bound on a run's cost (limits.worst_case_run_cost_usd). List prices in US dollars per

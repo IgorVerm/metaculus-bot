@@ -28,6 +28,13 @@ def cap_text(text: str | None, max_chars: int) -> str:
     return text[: max_chars - len(CUT_MARKER)] + CUT_MARKER
 
 
+def template_research_max_chars() -> int:
+    """Most characters of research a forecast on the template's path can receive: the research
+    at its cap and, for a conditional question, every earlier part's capped reasoning."""
+    appended = config.APPENDED_REASONING_MAX_CHARS + config.APPENDED_FRAME_CHARS
+    return config.RESEARCH_MAX_CHARS + (config.CONDITIONAL_PARTS - 1) * appended
+
+
 def split_for_run(items: list, per_run: int) -> tuple[list, list]:
     """The items this run takes, and those left for the next run."""
     per_run = max(per_run, 0)
@@ -71,7 +78,7 @@ def worst_case_calls(kind: str) -> dict[str, int]:
         }
     forecasts = len(config.PLAIN_FORECAST_SLOTS)
     # A conditional question forecasts its parent, its child and both branches in each forecast.
-    parts = 4 if kind == CONDITIONAL else 1
+    parts = config.CONDITIONAL_PARTS if kind == CONDITIONAL else 1
     if kind not in (PLAIN, CONDITIONAL):
         raise ValueError(f"unknown kind: {kind}")
     return {
@@ -88,7 +95,8 @@ def worst_case_question_cost_usd(kind: str = BINARY) -> float:
     Every call is taken at its limits: the input is the research cap (four characters per
     token) plus an allowance for the question and the instructions, the output is the output
     cap, and every flagship and search call is attempted as often as its tries allow. A second
-    look also quotes the model's answers and the contradictions, each at its cap. A parser
+    look also quotes the model's answers and the contradictions, each at its cap. Each later
+    part of a conditional question also reads the earlier parts' capped reasoning. A parser
     sample reads a whole flagship answer and is attempted as often as the framework's and the
     parser model's tries allow.
 
@@ -110,17 +118,17 @@ def worst_case_question_cost_usd(kind: str = BINARY) -> float:
             outputs = (answers_per_model + 1) * config.FORECASTER_MAX_OUTPUT_TOKENS
             total += config.FORECASTER_TRIES * call_cost_usd(spec["model"], inputs, outputs)
     else:
-        per_forecast = calls["flagship"] // len(config.PLAIN_FORECAST_SLOTS)
+        parts = calls["flagship"] // len(config.PLAIN_FORECAST_SLOTS)
+        appended = config.APPENDED_REASONING_MAX_CHARS + config.APPENDED_FRAME_CHARS
+        # Part number k of a conditional question reads the research and k earlier parts.
+        inputs = sum(
+            prompt_tokens(config.RESEARCH_MAX_CHARS + earlier * appended)
+            for earlier in range(parts)
+        )
+        outputs = parts * config.FORECASTER_MAX_OUTPUT_TOKENS
         for slot in config.PLAIN_FORECAST_SLOTS:
-            total += (
-                per_forecast
-                * config.FORECASTER_TRIES
-                * call_cost_usd(
-                    config.FORECASTERS[slot]["model"],
-                    research_input,
-                    config.FORECASTER_MAX_OUTPUT_TOKENS,
-                )
-            )
+            model_name = config.FORECASTERS[slot]["model"]
+            total += config.FORECASTER_TRIES * call_cost_usd(model_name, inputs, outputs)
 
     total += (
         calls["search"]

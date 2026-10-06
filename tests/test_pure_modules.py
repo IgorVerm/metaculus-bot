@@ -25,6 +25,46 @@ class TimeBudgetTest(unittest.TestCase):
         self.assertEqual(timebudget.seconds_until(naive, NOW), 3600)
 
 
+class SoonestFirstTest(unittest.TestCase):
+    class Question:
+        def __init__(self, name, close_time):
+            self.name = name
+            self.close_time = close_time
+
+    def names(self, questions):
+        return [question.name for question in timebudget.soonest_first(questions)]
+
+    def test_soonest_first_and_unknown_last(self):
+        Question = self.Question
+        questions = [
+            Question("weeks", NOW + timedelta(days=20)),
+            Question("unknown", None),
+            Question("hours", NOW + timedelta(hours=2)),
+            Question("days", NOW + timedelta(days=2)),
+        ]
+        self.assertEqual(self.names(questions), ["hours", "days", "weeks", "unknown"])
+        self.assertEqual([q.name for q in questions][0], "weeks")  # the input is not changed
+
+    def test_equal_and_unknown_close_times_keep_their_order(self):
+        Question = self.Question
+        same = NOW + timedelta(days=1)
+        questions = [
+            Question("u1", None),
+            Question("b", same),
+            Question("u2", None),
+            Question("a", same),
+            Question("first", NOW),
+        ]
+        self.assertEqual(self.names(questions), ["first", "b", "a", "u1", "u2"])
+        self.assertEqual(timebudget.soonest_first([]), [])
+
+    def test_naive_close_time_is_read_as_utc(self):
+        Question = self.Question
+        naive = (NOW + timedelta(hours=1)).replace(tzinfo=None)
+        questions = [Question("aware", NOW + timedelta(hours=2)), Question("naive", naive)]
+        self.assertEqual(self.names(questions), ["naive", "aware"])
+
+
 class CreditsTest(unittest.TestCase):
     def test_remaining_from_payload(self):
         self.assertEqual(credits.remaining_from_payload({"data": {"limit_remaining": 12.5}}), 12.5)

@@ -166,9 +166,9 @@ class MedianBot(FallTemplateBot2026):
         return super().get_llm(purpose, guarantee_type)
 
     async def _make_prediction(self, question, research):  # type: ignore[override]
-        # Every research text is cut before a prompt quotes it. For a conditional question the
-        # template appends each part's reasoning to the research; that grows no further either.
-        research = limits.cap_text(research, config.RESEARCH_MAX_CHARS)
+        # A backstop only. The research is cut where it is produced (run_research) and each
+        # appended part of a conditional question where it is appended, so this never bites.
+        research = limits.cap_text(research, limits.template_research_max_chars())
         if slots.active_model() is not None:
             # A nested call (the parts of a conditional question) stays on its slot's model.
             return await super()._make_prediction(question, research)
@@ -188,10 +188,23 @@ class MedianBot(FallTemplateBot2026):
 
     async def run_research(self, question: MetaculusQuestion) -> str:
         try:
-            return await super().run_research(question)
+            research = await super().run_research(question)
+            return limits.cap_text(research, config.RESEARCH_MAX_CHARS)
         except Exception as error:  # noqa: BLE001 - a failed source must not forfeit the question
             logger.warning(f"RESEARCH_FAILED for {question.page_url}: {type(error).__name__}")
             return ""
+
+    def _add_reasoning_to_research(  # type: ignore[override]
+        self, research, reasoning, question_type
+    ):
+        # A conditional question: the template appends an earlier part's forecast and reasoning
+        # to the research of the later parts. The forecast value is kept whole; the reasoning
+        # text is cut, so the research cannot grow without limit.
+        shortened = ReasonedPrediction(
+            prediction_value=reasoning.prediction_value,
+            reasoning=limits.cap_text(reasoning.reasoning, config.APPENDED_REASONING_MAX_CHARS),
+        )
+        return super()._add_reasoning_to_research(research, shortened, question_type)
 
     @staticmethod
     def _get_research_prompt(question, researcher) -> str:  # type: ignore[override]
@@ -875,11 +888,19 @@ def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> M
     )
 
 
-def select_questions(bot: MedianBot, questions: list[MetaculusQuestion], limit: int | None):
-    """Drop questions that close too soon to forecast, then apply the caps.
+def select_questions(
+    bot: MedianBot,
+    questions: list[MetaculusQuestion],
+    limit: int | None,
+    soonest_first: bool = True,
+):
+    """Drop questions that close too soon to forecast, order them, then apply the caps.
 
-    `limit` is the caller's cap (--max-questions, or the dry-run default). The cap per run
-    applies on top of it; what it leaves out stays unforecast and the next run takes it.
+    The questions that close soonest come first, so the caps never leave out a question that
+    is about to close in favour of one that has weeks left. `soonest_first=False` keeps the
+    caller's order (--only-posts). `limit` is the caller's cap (--max-questions, or the dry-run
+    default). The cap per run applies on top of it; what it leaves out stays unforecast and
+    the next run takes it.
     """
     if bot.skip_previously_forecasted_questions:
         # Filter here as well as in the framework, so the cap counts only questions still to do.
@@ -890,6 +911,8 @@ def select_questions(bot: MedianBot, questions: list[MetaculusQuestion], limit: 
             logger.warning(f"SKIPPED_TOO_LATE {question.page_url}")
             continue
         kept.append(question)
+    if soonest_first:
+        kept = timebudget.soonest_first(kept)
     if limit is not None:
         kept = kept[:limit]
     kept, left = limits.split_for_run(kept, config.MAX_QUESTIONS_PER_RUN)
@@ -973,7 +996,7 @@ def main(argv: list[str] | None = None) -> int:
     limit = args.max_questions
     if limit is None and not publish and not args.only_posts:
         limit = config.DRY_RUN_DEFAULT_MAX_QUESTIONS
-    questions = select_questions(bot, list(questions), limit)
+    questions = select_questions(bot, list(questions), limit, soonest_first=not args.only_posts)
     logger.info(f"QUESTIONS_SELECTED {len(questions)}")
 
     reports = asyncio.run(bot.forecast_questions(questions, return_exceptions=True))

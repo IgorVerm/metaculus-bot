@@ -14,17 +14,21 @@ Checked on 2026-10-06.
   the installed framework with stand-in models; it can only run on a runner.
 - The bot has never run against Metaculus or a model: the repository has no secrets yet
   (issue #4, the owner's steps).
-- Not verified until that first run: the model names resolve on the donated key, the
-  `reasoning` setting is accepted, the `:online` search models work and return the
-  `NEWEST_EVIDENCE_DATE` line, the parser model fills the structured answer reliably, how
-  often models contradict themselves, how often a fallback fires, and the cost per question
-  (estimated at $0.70 to $1.60 from list prices; not measured).
-- Hard limits are in place (`docs/design/bot.md`, "Limits"): output caps per call, a cap on
-  research text in prompts, five questions per run, and a computed worst case of $24.00 per run
-  (conditional questions; $17.94 for yes/no) under a ceiling of $25. Their effect on real calls is unverified until
-  the first run: whether `max_tokens` reaches each vendor through OpenRouter, and whether
-  12,000 tokens is enough for an answer at high reasoning effort (a cap that binds returns an
-  empty answer, which shows as `FALLBACK`).
+- Not verified until that first run, the first item first:
+  1. Whether 12,000 output tokens is enough for an answer at high reasoning effort. A cap that
+     binds returns an empty answer; look for `FALLBACK` lines for answers that could not be
+     parsed, and raise `FORECASTER_MAX_OUTPUT_TOKENS` if they appear (the cost test then says
+     whether the run cap must drop).
+  2. Whether `max_tokens` reaches each vendor through OpenRouter, the model names resolve on
+     the donated key and the `reasoning` setting is accepted.
+  3. Whether the `:online` search models work and return the `NEWEST_EVIDENCE_DATE` line, and
+     whether the parser model fills the structured answer reliably.
+  4. How often models contradict themselves, how often a fallback fires, and the cost per
+     question (estimated at $0.70 to $1.60 from list prices; not measured).
+- Hard limits are in place (`docs/design/bot.md`, "Limits"): output caps per call, caps on
+  research and quoted text in prompts, five questions per run taken soonest-closing first,
+  and a computed worst case of $24.72 per run (conditional questions; $17.94 for yes/no) under
+  a ceiling of $25.
 - The donated key serves OpenAI, Anthropic and Google models only, and its credit is not
   refilled within a season. AskNews allows 1,000 calls a month; the template's news search
   uses six per question.

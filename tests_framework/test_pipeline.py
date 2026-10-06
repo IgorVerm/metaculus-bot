@@ -656,10 +656,56 @@ class PipelineTest(unittest.TestCase):
             return run_bot.ReasonedPrediction(prediction_value=0.5, reasoning="r")
 
         other = MetaculusQuestion(question_text="How many?", **question_fields())
+        # The backstop: only a text beyond anything the caps upstream can produce is cut.
         with mock.patch.object(run_bot.FallTemplateBot2026, "_make_prediction", template_method):
             asyncio.run(bot._make_prediction(other, "R" * 100_000))
-        self.assertEqual(len(seen["research"]), config.RESEARCH_MAX_CHARS)
+        self.assertEqual(len(seen["research"]), limits.template_research_max_chars())
         self.assertTrue(seen["research"].endswith(limits.CUT_MARKER))
+
+        # Research is cut where the template path produces it.
+        long_research = StandInModel(
+            "openrouter/stand-in/research:online", lambda prompt: "R" * 100_000
+        )
+        bot = build([first], researcher=long_research)
+        produced = asyncio.run(bot.run_research(other))
+        self.assertEqual(len(produced), config.RESEARCH_MAX_CHARS)
+        self.assertTrue(produced.endswith(limits.CUT_MARKER))
+
+    def test_a_conditional_part_still_reads_the_earlier_forecasts(self):
+        first = forecaster("openrouter/stand-in/first", direct="", reversed_="")
+        bot = build([first])
+        research = limits.cap_text("R" * 100_000, config.RESEARCH_MAX_CHARS)  # at the cap
+        long_reasoning = "The reasoning starts here. " + "x" * 100_000
+        for part, value in (("parent", 0.11), ("child", 0.22), ("yes", 0.33)):
+            research = bot._add_reasoning_to_research(
+                research,
+                run_bot.ReasonedPrediction(prediction_value=value, reasoning=long_reasoning),
+                part,
+            )
+        self.assertLessEqual(len(research), limits.template_research_max_chars())
+
+        seen = {}
+
+        async def template_method(self, question, research):
+            seen["research"] = research
+            return run_bot.ReasonedPrediction(prediction_value=0.5, reasoning="r")
+
+        other = MetaculusQuestion(question_text="How many?", **question_fields())
+        with mock.patch.object(run_bot.FallTemplateBot2026, "_make_prediction", template_method):
+            asyncio.run(bot._make_prediction(other, research))
+        prompt_research = seen["research"]
+        self.assertEqual(prompt_research, research)  # the backstop did not bite
+        for part, shown in (("Parent", "11"), ("Child", "22"), ("Yes", "33")):
+            self.assertIn(
+                f"previously forecasted the {part} Question to the value: {shown}",
+                prompt_research,
+            )
+        self.assertEqual(prompt_research.count("The reasoning starts here."), 3)
+        self.assertGreater(prompt_research.count("R"), config.RESEARCH_MAX_CHARS - 200)
+        self.assertLessEqual(
+            prompt_research.count("x"), 3 * config.APPENDED_REASONING_MAX_CHARS
+        )
+        self.assertTrue(prompt_research.rstrip().endswith("question."))  # the template's last line
 
     def test_questions_per_run_are_capped(self):
         class Bot:
@@ -681,6 +727,21 @@ class PipelineTest(unittest.TestCase):
             [record.getMessage() for record in captured.records],
             [f"RUN_CAPPED kept={cap} left_for_next_run=4"],
         )
+        # The questions that close soonest are taken first, whatever order they arrive in.
+        mixed = questions(cap + 2)
+        for position, question in enumerate(mixed):
+            question.close_time = NOW + timedelta(days=30 - position)
+        mixed[0].close_time = None
+        with self.assertLogs("run_bot", level="WARNING"):
+            kept = run_bot.select_questions(Bot(), mixed, None)
+        self.assertEqual(kept, list(reversed(mixed[2:])))
+        with self.assertNoLogs("run_bot", level="WARNING"):
+            self.assertEqual(run_bot.select_questions(Bot(), mixed, 1), [mixed[-1]])
+        # --only-posts keeps the caller's order; the caps still apply.
+        with self.assertLogs("run_bot", level="WARNING"):
+            kept = run_bot.select_questions(Bot(), mixed, None, soonest_first=False)
+        self.assertEqual(kept, mixed[:cap])
+
         # A caller's larger cap does not lift it; a smaller one still applies, without the line.
         with self.assertLogs("run_bot", level="WARNING"):
             kept = run_bot.select_questions(Bot(), questions(cap + 5), cap + 3)

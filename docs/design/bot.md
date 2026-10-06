@@ -180,15 +180,21 @@ plain arithmetic, set in `bot/config.py` and applied by `bot/limits.py` and `run
 | Output per parser or summarizer call | 4,000 tokens | the same for the helper models |
 | Research text in a prompt | 16,000 characters per framing | a long search result multiplied into every answer's input |
 | A model's own answer quoted in a second look | 4,000 characters each | a long structured answer fed back whole |
+| An earlier part's reasoning appended for a conditional question | 4,000 characters each | research that grows with every part of a conditional question |
 | Questions per run | 5 | a full tournament answered in one run after a pause |
 
 A cut text ends with a marker saying it was cut. When the freshness retry ran, both parts are
 cut (the retry to 5,000 characters), so the newest developments are never the part lost. The
-evidence date is read before the cut. For other question types the research is cut where the
-template's forecast receives it, which for a conditional question includes the earlier parts'
-reasoning that the template appends. The parser and the summarizer are built as model objects
-so that they carry their cap. The run cap applies after the other filters and on top of
-`--max-questions` and the dry-run cap; a run that leaves questions logs `RUN_CAPPED`, and the
+evidence date is read before the cut. For other question types the research is cut where
+`MedianBot.run_research` produces it. A conditional question is forecast in four parts, and the
+template appends each earlier part's forecast and reasoning to the research of the later
+ones; `MedianBot._add_reasoning_to_research` cuts that reasoning and leaves the forecast value
+whole, so a later part always reads the earlier forecasts. A last cut where the template's
+forecast receives the research is a backstop, sized above anything those two cuts can
+produce. The parser and the summarizer are built as model objects
+so that they carry their cap. The questions that close soonest are taken first (unknown close times last), so a cap never
+leaves out a question that is about to close; `--only-posts` keeps the order given. The run
+cap applies after the other filters and on top of `--max-questions` and the dry-run cap; a run that leaves questions logs `RUN_CAPPED`, and the
 next run takes them because they are still unforecast.
 
 `limits.worst_case_run_cost_usd()` computes the most a run can cost from these settings and
@@ -201,10 +207,10 @@ bound for any kind of question over the ceiling of $25 (`RUN_COST_CEILING_USD`).
 | Yes/no | $3.59 | $17.94 |
 | Multiple choice | $2.72 | $13.61 |
 | Numeric, discrete, date | $1.21 | $6.03 |
-| Conditional | $4.80 | $24.00 |
+| Conditional | $4.94 | $24.72 |
 
 A conditional question costs most because the template forecasts four parts in each of its
-three forecasts. Not
+three forecasts, and each later part also reads the earlier parts' reasoning. Not
 included, because they are not known: web-search fees and the search results a vendor adds
 to a search model's input. The bound assumes the question and our instructions fit in 3,000
 tokens per call. These are bounds, not expectations: the expected cost is far lower and is
