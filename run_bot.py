@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
-from bot import config, credits, formal, framings, freshness, researcher, slots, timebudget
+from bot import config, credits, formal, framings, freshness, limits, researcher
+from bot import slots, timebudget
 from main import FallTemplateBot2026  # also silences noisy dependencies and loads .env
 
 from bot_helpers import check_environment, print_run_summary_banner, print_startup_banner
@@ -165,6 +166,9 @@ class MedianBot(FallTemplateBot2026):
         return super().get_llm(purpose, guarantee_type)
 
     async def _make_prediction(self, question, research):  # type: ignore[override]
+        # Every research text is cut before a prompt quotes it. For a conditional question the
+        # template appends each part's reasoning to the research; that grows no further either.
+        research = limits.cap_text(research, config.RESEARCH_MAX_CHARS)
         if slots.active_model() is not None:
             # A nested call (the parts of a conditional question) stays on its slot's model.
             return await super()._make_prediction(question, research)
@@ -371,7 +375,12 @@ class MedianBot(FallTemplateBot2026):
                     later = await self._search_model.invoke(
                         framings.freshness_research_request(run.text, since, requirements)
                     )
-                    text = framings.join_research(text, later or "")
+                    # Both parts are cut, so the newest developments are never the part lost.
+                    room = config.RESEARCH_MAX_CHARS - config.RESEARCH_RETRY_MAX_CHARS - 100
+                    text = framings.join_research(
+                        limits.cap_text(text, room),
+                        limits.cap_text(later, config.RESEARCH_RETRY_MAX_CHARS),
+                    )
                     later_newest = freshness.newest_evidence_date(later)
                     if freshness.age_in_days(later_newest, run.today) is not None:
                         dated = newest if age is not None else None
@@ -381,6 +390,8 @@ class MedianBot(FallTemplateBot2026):
                     self._fallback(run, "freshness retry", error)
         if age is None:
             newest = None
+        # The evidence line was read above, from the whole text; now cut what a prompt quotes.
+        text = limits.cap_text(text, config.RESEARCH_MAX_CHARS)
         logger.info(
             f"FRESHNESS {run.url} framing={framing} search_model={from_search} "
             f"newest={newest.isoformat() if newest else 'unknown'} "
@@ -718,10 +729,13 @@ class MedianBot(FallTemplateBot2026):
         return f"{answer.checked:.2f}"
 
     async def _second_look(self, run: _Run, model, own: dict, findings: list[str], research: str):
+        quote_cap = config.QUOTED_ANSWER_MAX_CHARS
         said = "\n".join(
-            f"- {own[framing].shown}" for framing in config.FRAMINGS[run.kind] if framing in own
+            "- " + limits.cap_text(own[framing].shown, quote_cap - 2)
+            for framing in config.FRAMINGS[run.kind]
+            if framing in own
         )
-        contradictions = formal.describe(findings)
+        contradictions = limits.cap_text(formal.describe(findings), quote_cap)
         note = (
             "*Second look: this model's first answers contradicted each other, so it was shown "
             "the contradiction and answered once more. This answer replaces its first direct "
@@ -778,6 +792,7 @@ def build_forecasters(lineup: credits.Lineup) -> list[GeneralLlm]:
             temperature=None,
             timeout=config.FORECASTER_TIMEOUT_SECONDS,
             allowed_tries=config.FORECASTER_TRIES,
+            max_tokens=config.FORECASTER_MAX_OUTPUT_TOKENS,
             **spec,
         )
         for spec in specs
@@ -795,6 +810,24 @@ def build_search_model(name: str = config.SEARCH_MODEL) -> GeneralLlm:
         temperature=None,
         timeout=config.SEARCH_TIMEOUT_SECONDS,
         allowed_tries=config.SEARCH_TRIES,
+        max_tokens=config.SEARCH_MAX_OUTPUT_TOKENS,
+    )
+
+
+def build_helper_model(name: str) -> str | GeneralLlm:
+    """The parser or the summarizer, with its output cap.
+
+    Given as a name, the template would build the model without a cap. Only an OpenRouter
+    model is built here; for other routes the framework puts a credential into the published
+    model settings (bot/researcher.py), so any other name stays a name.
+    """
+    if not researcher.is_openrouter_model(name):
+        return name
+    return GeneralLlm(
+        model=name,
+        temperature=None,
+        allowed_tries=config.PARSER_TRIES,
+        max_tokens=config.HELPER_MAX_OUTPUT_TOKENS,
     )
 
 
@@ -835,15 +868,19 @@ def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> M
         extra_metadata_in_explanation=True,
         llms={
             "default": build_forecasters("single")[0],
-            "summarizer": config.SUMMARIZER_MODEL,
+            "summarizer": build_helper_model(config.SUMMARIZER_MODEL),
             "researcher": build_researcher(),
-            "parser": config.PARSER_MODEL,
+            "parser": build_helper_model(config.PARSER_MODEL),
         },
     )
 
 
 def select_questions(bot: MedianBot, questions: list[MetaculusQuestion], limit: int | None):
-    """Drop questions that close too soon to forecast, then apply the cap."""
+    """Drop questions that close too soon to forecast, then apply the caps.
+
+    `limit` is the caller's cap (--max-questions, or the dry-run default). The cap per run
+    applies on top of it; what it leaves out stays unforecast and the next run takes it.
+    """
     if bot.skip_previously_forecasted_questions:
         # Filter here as well as in the framework, so the cap counts only questions still to do.
         questions = [q for q in questions if not q.already_forecasted]
@@ -853,7 +890,12 @@ def select_questions(bot: MedianBot, questions: list[MetaculusQuestion], limit: 
             logger.warning(f"SKIPPED_TOO_LATE {question.page_url}")
             continue
         kept.append(question)
-    return kept if limit is None else kept[:limit]
+    if limit is not None:
+        kept = kept[:limit]
+    kept, left = limits.split_for_run(kept, config.MAX_QUESTIONS_PER_RUN)
+    if left:
+        logger.warning(f"RUN_CAPPED kept={len(kept)} left_for_next_run={len(left)}")
+    return kept
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -890,6 +932,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"plain forecasts: {[m.model for m in bot._plain_lineup]}")
         print(f"researcher: {choose_researcher()}  parser: {config.PARSER_MODEL}")
         print(f"search model: {config.SEARCH_MODEL}")
+        print(
+            f"limits: {config.MAX_QUESTIONS_PER_RUN} questions per run, "
+            f"worst case ${limits.worst_case_run_cost_usd():.2f} per run"
+        )
         return 0
 
     check_environment(strict=True)

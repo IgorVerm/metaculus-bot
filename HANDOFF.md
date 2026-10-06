@@ -19,6 +19,12 @@ Checked on 2026-10-06.
   `NEWEST_EVIDENCE_DATE` line, the parser model fills the structured answer reliably, how
   often models contradict themselves, how often a fallback fires, and the cost per question
   (estimated at $0.70 to $1.60 from list prices; not measured).
+- Hard limits are in place (`docs/design/bot.md`, "Limits"): output caps per call, a cap on
+  research text in prompts, six questions per run, and a computed worst case of $21.53 per run
+  of yes/no questions under a ceiling of $25. Their effect on real calls is unverified until
+  the first run: whether `max_tokens` reaches each vendor through OpenRouter, and whether
+  12,000 tokens is enough for an answer at high reasoning effort (a cap that binds returns an
+  empty answer, which shows as `FALLBACK`).
 - The donated key serves OpenAI, Anthropic and Google models only, and its credit is not
   refilled within a season. AskNews allows 1,000 calls a month; the template's news search
   uses six per question.
@@ -38,8 +44,8 @@ gh run list --workflow run_main.yaml --json createdAt,event,conclusion   # deliv
 `tests_framework/` needs the framework, which is installed on runners only:
 `poetry run python -m unittest discover -s tests_framework -v` (a step of `ci.yaml`).
 
-A run prints `CREDIT_REMAINING`, `QUESTIONS_SELECTED` and `RUN_SUMMARY`, and per question
-`CONSISTENCY`, `SECOND_LOOK`, `FALLBACK`, `SOURCES` and `FRESHNESS`; search the run log for
+A run prints `CREDIT_REMAINING`, `QUESTIONS_SELECTED`, `RUN_SUMMARY` and, when it left
+questions for the next run, `RUN_CAPPED`; per question `CONSISTENCY`, `SECOND_LOOK`, `FALLBACK`, `SOURCES` and `FRESHNESS`; search the run log for
 those words (`docs/design/bot.md` says what each means).
 
 The first dry run with the donated key must show, for a yes/no question: three research

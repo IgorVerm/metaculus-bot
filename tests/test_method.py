@@ -8,7 +8,7 @@ import random
 import unittest
 from datetime import date
 
-from bot import config, formal, framings, freshness
+from bot import config, formal, framings, freshness, limits
 
 TODAY = date(2026, 10, 6)
 SETTINGS = dict(range_tolerance=0.05, pair_tolerance=0.10, max_events=6)
@@ -510,6 +510,106 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(freshness.blocked_among(found, config.BLOCKED_DOMAINS), [])
         self.assertIsNone(freshness.domain_of("not an address"))
         self.assertIsNone(freshness.domain_of("http://[broken"))
+
+
+class LimitsTest(unittest.TestCase):
+    def test_short_text_is_untouched(self):
+        self.assertEqual(limits.cap_text("short", 100), "short")
+        self.assertEqual(limits.cap_text("x" * 100, 100), "x" * 100)
+        self.assertEqual(limits.cap_text(None, 100), "")
+        self.assertEqual(limits.cap_text("", 100), "")
+
+    def test_long_text_is_cut_to_the_limit_and_says_so(self):
+        for size in (101, 5000, 10**6):
+            cut = limits.cap_text("x" * size, 100)
+            self.assertEqual(len(cut), 100)
+            self.assertTrue(cut.endswith(limits.CUT_MARKER))
+            self.assertTrue(cut.startswith("x" * (100 - len(limits.CUT_MARKER))))
+        self.assertEqual(limits.cap_text("abcdefgh", 3), "abc")  # no room for the marker
+        self.assertEqual(limits.cap_text("abcdefgh", 0), "")
+        self.assertEqual(limits.cap_text("abcdefgh", -5), "")
+        once = limits.cap_text("y" * 50000, config.RESEARCH_MAX_CHARS)
+        self.assertEqual(len(once), config.RESEARCH_MAX_CHARS)
+        self.assertEqual(limits.cap_text(once, config.RESEARCH_MAX_CHARS), once)
+
+    def test_run_cap(self):
+        self.assertEqual(limits.split_for_run([1, 2, 3], 5), ([1, 2, 3], []))
+        self.assertEqual(limits.split_for_run([1, 2, 3], 3), ([1, 2, 3], []))
+        self.assertEqual(limits.split_for_run([1, 2, 3], 2), ([1, 2], [3]))
+        self.assertEqual(limits.split_for_run([], 2), ([], []))
+        self.assertEqual(limits.split_for_run([1, 2], 0), ([], [1, 2]))
+        self.assertEqual(limits.split_for_run([1, 2], -1), ([], [1, 2]))
+        kept, left = limits.split_for_run(list(range(40)), config.MAX_QUESTIONS_PER_RUN)
+        self.assertEqual(len(kept), config.MAX_QUESTIONS_PER_RUN)
+        self.assertEqual(len(left), 40 - config.MAX_QUESTIONS_PER_RUN)
+
+    def test_limits_as_set_by_the_owner(self):
+        self.assertEqual(config.FORECASTER_MAX_OUTPUT_TOKENS, 12000)
+        self.assertEqual(config.SEARCH_MAX_OUTPUT_TOKENS, 6000)
+        self.assertEqual(config.HELPER_MAX_OUTPUT_TOKENS, 4000)
+        self.assertEqual(config.RESEARCH_MAX_CHARS, 16000)
+        self.assertEqual(config.QUOTED_ANSWER_MAX_CHARS, 4000)
+        self.assertEqual(config.MAX_QUESTIONS_PER_RUN, 6)
+        self.assertEqual(config.RUN_COST_CEILING_USD, 25)
+        self.assertLess(config.RESEARCH_RETRY_MAX_CHARS, config.RESEARCH_MAX_CHARS - 100)
+
+    def test_worst_case_call_counts(self):
+        self.assertEqual(
+            limits.worst_case_calls("binary"),
+            {"flagship": 8, "second_looks": 2, "search": 4, "parser": 14},
+        )
+        self.assertEqual(
+            limits.worst_case_calls("multiple_choice"),
+            {"flagship": 6, "second_looks": 2, "search": 3, "parser": 12},
+        )
+        self.assertEqual(limits.worst_case_calls("plain")["flagship"], 3)
+        self.assertEqual(limits.worst_case_calls("conditional")["flagship"], 12)
+        with self.assertRaises(ValueError):
+            limits.worst_case_calls("other")
+
+    def test_every_model_has_a_price(self):
+        names = [spec["model"] for spec in config.FORECASTERS]
+        names += [config.SEARCH_MODEL, config.PARSER_MODEL, config.SUMMARIZER_MODEL]
+        names.append(config.RESEARCHER_WITHOUT_ASKNEWS)
+        for name in names:
+            price_in, price_out = limits.price_per_million(name)
+            self.assertGreater(price_in, 0)
+            self.assertGreater(price_out, price_in)
+        self.assertEqual(limits.price_per_million("openrouter/openai/gpt-6.1-sol"), (2.0, 10.0))
+        self.assertEqual(
+            limits.price_per_million("openrouter/anthropic/claude-opus-5.5"), (4.0, 20.0)
+        )
+        self.assertEqual(limits.price_per_million(config.SEARCH_MODEL), (0.10, 0.50))
+        self.assertAlmostEqual(limits.call_cost_usd(config.SEARCH_MODEL, 1e6, 1e6), 0.60)
+        with self.assertRaises(KeyError):
+            limits.price_per_million("openrouter/other/model")
+
+    def test_the_bound_by_hand(self):
+        # A yes/no question at the limits, written out. Input per call: 16000 / 4 + 3000.
+        research_in = 7000
+        second_look_in = (16000 + 4 * 4000) / 4 + 3000
+        self.assertEqual(limits.prompt_tokens(config.RESEARCH_MAX_CHARS), research_in)
+        flagship = 0.0
+        for price_in, price_out in ((2.0, 10.0), (4.0, 20.0)):  # four calls on each model
+            tokens_in = 3 * research_in + second_look_in
+            flagship += 2 * (tokens_in * price_in + 4 * 12000 * price_out) / 1e6  # two tries
+        search = 4 * 2 * (research_in * 0.10 + 6000 * 0.50) / 1e6
+        parser = 14 * 3 * 2 * ((12000 + 3000) * 0.10 + 4000 * 0.50) / 1e6
+        by_hand = flagship + search + parser
+        self.assertAlmostEqual(limits.worst_case_question_cost_usd(), by_hand)
+        self.assertAlmostEqual(limits.worst_case_question_cost_usd("binary"), by_hand)
+        self.assertAlmostEqual(
+            limits.worst_case_run_cost_usd(), config.MAX_QUESTIONS_PER_RUN * by_hand
+        )
+
+    def test_a_run_stays_under_the_cost_ceiling(self):
+        # A config change that lifts the bound over the ceiling fails here.
+        self.assertLess(limits.worst_case_run_cost_usd(), config.RUN_COST_CEILING_USD)
+        self.assertGreater(limits.worst_case_run_cost_usd(), 0)
+        for kind in ("multiple_choice", "plain"):
+            self.assertLess(
+                limits.worst_case_run_cost_usd(kind), limits.worst_case_run_cost_usd()
+            )
 
 
 class MethodSettingsTest(unittest.TestCase):

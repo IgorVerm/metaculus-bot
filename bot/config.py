@@ -47,10 +47,19 @@ MIN_OPTION_PROBABILITY = 0.01
 
 FORECASTER_TIMEOUT_SECONDS = 480
 FORECASTER_TRIES = 2
+# Output cap per call ("max_tokens"). Reasoning tokens count against it, so it stays generous:
+# a cap that binds returns an empty answer.
+FORECASTER_MAX_OUTPUT_TOKENS = 12000
 
 # Turns a model's free-text answer into structured values. A cheap model saturates this job.
 PARSER_MODEL = "openrouter/openai/gpt-6-luna"
 SUMMARIZER_MODEL = "openrouter/openai/gpt-6-luna"
+HELPER_MAX_OUTPUT_TOKENS = 4000  # output cap per call of the parser and the summarizer
+PARSER_TRIES = 2
+# How the template and the framework call the parser (main.py and structure_output in the
+# pinned framework): samples per answer, and tries per sample when the format is wrong.
+TEMPLATE_PARSER_SAMPLES = 2
+STRUCTURE_OUTPUT_TRIES = 3
 
 # The search model: a cheap model with its vendor's own web search, through the ":online"
 # suffix. It answers our own research requests (the reversed and structured framings and the
@@ -59,6 +68,7 @@ SUMMARIZER_MODEL = "openrouter/openai/gpt-6-luna"
 SEARCH_MODEL = "openrouter/openai/gpt-6-luna:online"
 SEARCH_TIMEOUT_SECONDS = 300
 SEARCH_TRIES = 2
+SEARCH_MAX_OUTPUT_TOKENS = 6000  # output cap per call
 
 # The template's research. AskNews is free for tournament entrants once granted (1,000 calls a
 # month, 4,000 for the tournament; the template's news search uses six calls per question).
@@ -78,6 +88,27 @@ BLOCKED_DOMAINS: tuple[str, ...] = ()
 # forecasters read all of it. SOURCES log lines list at most MAX_LOGGED_SOURCES addresses.
 RESEARCH_CHARS_IN_COMMENT = 3000
 MAX_LOGGED_SOURCES = 60
+
+# Limits (bot/limits.py). A research text is cut to RESEARCH_MAX_CHARS before it goes into a
+# prompt (the freshness retry's part of it to RESEARCH_RETRY_MAX_CHARS); each of a model's own
+# answers quoted back to it in a second look is cut to QUOTED_ANSWER_MAX_CHARS. A run answers at
+# most MAX_QUESTIONS_PER_RUN questions; the rest stay unforecast and the next run takes them.
+RESEARCH_MAX_CHARS = 16000
+RESEARCH_RETRY_MAX_CHARS = 5000
+QUOTED_ANSWER_MAX_CHARS = 4000
+MAX_QUESTIONS_PER_RUN = 6
+
+# The bound on a run's cost (limits.worst_case_run_cost_usd). List prices in US dollars per
+# million tokens, (input, output), checked 2026-10-06. A test fails when the bound for a run of
+# yes/no questions exceeds the ceiling.
+PRICES_USD_PER_MILLION_TOKENS: dict[str, tuple[float, float]] = {
+    "openrouter/openai/gpt-6.1-sol": (2.0, 10.0),
+    "openrouter/anthropic/claude-opus-5.5": (4.0, 20.0),
+    "openrouter/openai/gpt-6-luna": (0.10, 0.50),
+}
+CHARS_PER_TOKEN = 4
+PROMPT_ALLOWANCE_TOKENS = 3000  # the question and our instructions, per call
+RUN_COST_CEILING_USD = 25.0
 
 # Donated credit left on the OpenRouter key, in US dollars.
 FULL_LINEUP_MIN_USD = 5.0  # below this, forecast with the first model only

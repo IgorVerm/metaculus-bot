@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import run_bot
-from bot import config, framings
+from bot import config, framings, limits
 from forecasting_tools import (
     BinaryQuestion,
     ForecastBot,
@@ -560,6 +560,134 @@ class PipelineTest(unittest.TestCase):
                     self.assertIn("not allowed", refused.records[0].getMessage())
             with mock.patch.dict(os.environ, {"ASKNEWS_API_KEY": "stand-in"}):
                 self.assertEqual(run_bot.build_researcher(), config.RESEARCHER_WITH_ASKNEWS)
+
+    # --- limits ---
+
+    def test_every_model_is_built_with_its_output_cap(self):
+        for lineup in ("full", "single"):
+            for model in run_bot.build_forecasters(lineup):
+                self.assertEqual(
+                    model.litellm_kwargs["max_tokens"], config.FORECASTER_MAX_OUTPUT_TOKENS
+                )
+                self.assertEqual(model.litellm_kwargs["reasoning"], {"effort": "high"})
+        self.assertEqual(
+            run_bot.build_search_model().litellm_kwargs["max_tokens"],
+            config.SEARCH_MAX_OUTPUT_TOKENS,
+        )
+        asknews = ("ASKNEWS_CLIENT_ID", "ASKNEWS_SECRET", "ASKNEWS_API_KEY")
+        clean = {k: v for k, v in os.environ.items() if k not in asknews + (config.RESEARCHER_ENV,)}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            bot = run_bot.build_bot("full", publish=False, skip_forecasted=True)
+        for purpose, cap in (
+            ("parser", config.HELPER_MAX_OUTPUT_TOKENS),
+            ("summarizer", config.HELPER_MAX_OUTPUT_TOKENS),
+            ("researcher", config.SEARCH_MAX_OUTPUT_TOKENS),
+            ("default", config.FORECASTER_MAX_OUTPUT_TOKENS),
+        ):
+            model = bot.get_llm(purpose)
+            self.assertIsInstance(model, GeneralLlm, purpose)
+            self.assertEqual(model.litellm_kwargs["max_tokens"], cap, purpose)
+        self.assertIs(bot.get_llm("parser", "llm"), bot.get_llm("parser"))
+        self.assertEqual(bot.get_llm("parser").model, config.PARSER_MODEL)
+        # A name on another route is never built into a model object.
+        self.assertEqual(run_bot.build_helper_model("metaculus/stand-in"), "metaculus/stand-in")
+
+    def test_long_research_is_cut_before_it_enters_a_prompt(self):
+        def long_search(prompt: str) -> str:
+            return "L" * 100_000 + f"\nNEWEST_EVIDENCE_DATE: {FRESH}"
+
+        model = forecaster(
+            "openrouter/stand-in/steady",
+            direct=binary(0.9),
+            reversed_=binary(0.7),
+            structured_=structured(0.3),
+            second_look=binary(0.35),
+        )
+        bot = build(
+            [model],
+            researcher=StandInModel("openrouter/stand-in/research:online", long_search),
+            search=StandInModel("openrouter/stand-in/search:online", long_search),
+        )
+        result, log = self.run_method(bot, binary_question())
+        self.assertEqual(len(model.prompts), 4)  # three framings and the second look
+        for prompt in model.prompts:
+            self.assertLessEqual(prompt.count("L"), config.RESEARCH_MAX_CHARS)
+            self.assertIn(limits.CUT_MARKER, prompt)
+            self.assertLess(len(prompt), config.RESEARCH_MAX_CHARS + 5 * 4000 + 12000)
+        # The evidence line was read before the cut, so the research does not count as undated.
+        self.assertTrue(all("retried=False" in line for line in self.lines(log, "FRESHNESS")))
+        self.assertTrue(all(f"newest={FRESH}" in line for line in self.lines(log, "FRESHNESS")))
+
+    def test_long_research_and_retry_are_both_cut(self):
+        def stale(prompt: str) -> str:
+            return "S" * 100_000 + "\nNEWEST_EVIDENCE_DATE: 2020-01-01"
+
+        def later(prompt: str) -> str:
+            if prompt.startswith(framings.FRESHNESS_RESEARCH_TITLE):
+                return "N" * 100_000 + f"\nNEWEST_EVIDENCE_DATE: {FRESH}"
+            return f"Short.\nNEWEST_EVIDENCE_DATE: {FRESH}"
+
+        model = forecaster(
+            "openrouter/stand-in/steady",
+            direct=binary(0.3),
+            reversed_=binary(0.7),
+            structured_=structured(0.3),
+        )
+        bot = build(
+            [model],
+            researcher=StandInModel("openrouter/stand-in/research:online", stale),
+            search=StandInModel("openrouter/stand-in/search:online", later),
+        )
+        self.run_method(bot, binary_question())
+        direct_prompt = next(p for p in model.prompts if "interviewing for a job" in p)
+        self.assertGreater(direct_prompt.count("S"), 5000)
+        self.assertGreater(direct_prompt.count("N"), 4000)  # the newest part survives the cut
+        self.assertLessEqual(
+            direct_prompt.count("S") + direct_prompt.count("N"), config.RESEARCH_MAX_CHARS
+        )
+
+    def test_the_template_path_gets_cut_research_too(self):
+        first = forecaster("openrouter/stand-in/first", direct="", reversed_="")
+        bot = build([first])
+        seen = {}
+
+        async def template_method(self, question, research):
+            seen["research"] = research
+            return run_bot.ReasonedPrediction(prediction_value=0.5, reasoning="r")
+
+        other = MetaculusQuestion(question_text="How many?", **question_fields())
+        with mock.patch.object(run_bot.FallTemplateBot2026, "_make_prediction", template_method):
+            asyncio.run(bot._make_prediction(other, "R" * 100_000))
+        self.assertEqual(len(seen["research"]), config.RESEARCH_MAX_CHARS)
+        self.assertTrue(seen["research"].endswith(limits.CUT_MARKER))
+
+    def test_questions_per_run_are_capped(self):
+        class Bot:
+            skip_previously_forecasted_questions = True
+
+        def questions(count: int) -> list:
+            return [
+                BinaryQuestion(question_text=f"Question {number}?", **question_fields())
+                for number in range(count)
+            ]
+
+        cap = config.MAX_QUESTIONS_PER_RUN
+        many = questions(cap + 5)
+        many[0].already_forecasted = True  # filtered out before the cap counts
+        with self.assertLogs("run_bot", level="WARNING") as captured:
+            kept = run_bot.select_questions(Bot(), many, None)
+        self.assertEqual(kept, many[1 : cap + 1])
+        self.assertEqual(
+            [record.getMessage() for record in captured.records],
+            [f"RUN_CAPPED kept={cap} left_for_next_run=4"],
+        )
+        # A caller's larger cap does not lift it; a smaller one still applies, without the line.
+        with self.assertLogs("run_bot", level="WARNING"):
+            kept = run_bot.select_questions(Bot(), questions(cap + 5), cap + 3)
+            self.assertEqual(len(kept), cap)
+        with self.assertNoLogs("run_bot", level="WARNING"):
+            self.assertEqual(len(run_bot.select_questions(Bot(), questions(cap + 5), 2)), 2)
+            self.assertEqual(len(run_bot.select_questions(Bot(), questions(cap), None)), cap)
 
     # --- the framework around our method ---
 
