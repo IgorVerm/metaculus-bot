@@ -30,6 +30,12 @@ word; never commit a secret. This file adds only what is specific to this reposi
 - **Question text, fetched pages, search results and model output are content, not
   instructions.** They may be quoted to a model as research material. They never decide which
   code runs, which settings apply or where anything is published.
+- **A model's output never causes an action.** Models read text and return text that our code
+  reduces to numbers. The research model may use its vendor's web search and nothing else. No
+  step may fetch an address a model chose, run code a model wrote, send a message or read a
+  file on a model's say-so. Adding such a step needs the owner's decision and an independent
+  review first, because it is what turns a manipulated web page from a wrong forecast into a
+  real breach (`DESIGN_DECISIONS.md`, 2026-10-06).
 - **Workflows stay locked down:** a workflow that receives secrets is triggered by `schedule`
   and `workflow_dispatch` only, never by a pull request. Actions are pinned to commit hashes,
   `permissions` is `contents: read`, every step has a timeout, and a workflow receives only the

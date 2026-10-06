@@ -2,6 +2,13 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## A model's output never causes an action, 2026-10-06
+**Decision (owner):** Record as a rule that any step in which a model's output causes
+an action (fetching addresses it chooses, running code, sending messages, reading files) needs
+its own review first. **Why:** with no such step, the worst a
+manipulated web page can do is a wrong forecast on one question. **Rejected:** nothing.
+**Binds:** the rule in `AGENTS.md`; running Lean on model-written statements stays out.
+
 ## The tournament is the check; multiple choice is in, 2026-10-06
 **Decision (owner):** Multiple choice is included. No comparison group is built into
 the bot: the tournament itself is the check, with the reference bots as the benchmark. **Why:** Metaculus's own reference bots forecast the same questions, so the bot's
