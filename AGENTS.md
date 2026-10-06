@@ -39,7 +39,8 @@ word; never commit a secret. This file adds only what is specific to this reposi
 - **Workflows stay locked down:** a workflow that receives secrets is triggered by `schedule`
   and `workflow_dispatch` only, never by a pull request. Actions are pinned to commit hashes,
   `permissions` is `contents: read`, every step has a timeout, and a workflow receives only the
-  secrets it uses. `ci.yaml` runs on push and receives no secrets.
+  secrets it uses. `ci.yaml` is started by hand, once per landing that touches code, and
+  receives no secrets.
 - **Upstream files stay as upstream ships them.** `main.py`, `bot_helpers.py`,
   `main_with_no_framework.py`, `integrations/` and `README.md` come from
   `Metaculus/metac-bot-template`. Our behaviour lives in `run_bot.py` and `bot/`, so upstream

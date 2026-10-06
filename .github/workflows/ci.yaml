@@ -1,8 +1,8 @@
 name: CI
 
-# Runs on every push. Uses no secrets and makes no forecasts.
+# Started by hand, once per landing that touches code: gh workflow run ci.yaml
+# Uses no secrets and makes no forecasts.
 on:
-  push:
   workflow_dispatch:
 
 permissions:
@@ -38,3 +38,6 @@ jobs:
       - name: The bot builds against the installed framework
         timeout-minutes: 5
         run: poetry run python run_bot.py --self-check
+      - name: Our method against the installed framework, with stand-in models (no network)
+        timeout-minutes: 10
+        run: poetry run python -m unittest discover -s tests_framework -v
