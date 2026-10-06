@@ -2,6 +2,14 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## Specification of our method confirmed, 2026-10-06
+**Decision (owner):** Build the method now, with all four additions (research per
+framing, no lost questions, numeric questions, early measurement) and with fresh information
+forced. **Why:** the season is running.
+**Rejected:** one model only; requiring the free news service.
+**Binds:** issue #9 as written on that date is the approved scope of milestone 1; numeric
+questions are milestone 2.
+
 ## A model's output never causes an action, 2026-10-06
 **Decision (owner):** Record as a rule that any step in which a model's output causes
 an action (fetching addresses it chooses, running code, sending messages, reading files) needs
