@@ -1,16 +1,18 @@
-name: Test bot on the testing area
+name: Forecast on the main tournament
 
-# Forecasts the bot-testing-area tournament. Publishes only when the box is ticked.
+# Scheduled runs start only once the owner has switched the bot live (repository variable BOT_LIVE).
+# A manual run before that is a dry run, capped at a few questions so it cannot drain credits.
 on:
   workflow_dispatch:
     inputs:
-      publish:
-        description: "Publish the forecasts to the testing area"
-        type: boolean
-        default: false
       max_questions:
         description: "Forecast at most this many questions (empty: all when publishing, 3 otherwise)"
         default: "3"
+  schedule:
+    # Three separate entries, off the hour: GitHub drops scheduled runs under load.
+    - cron: "7 * * * *"
+    - cron: "27 * * * *"
+    - cron: "47 * * * *"
 
 permissions:
   contents: read
@@ -21,6 +23,7 @@ concurrency:
 
 jobs:
   forecast:
+    if: github.event_name == 'workflow_dispatch' || vars.BOT_LIVE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
@@ -47,11 +50,11 @@ jobs:
             if [[ ! "$MAX_QUESTIONS" =~ ^[0-9]+$ ]]; then echo "max_questions must be a whole number"; exit 1; fi
             args+=(--max-questions "$MAX_QUESTIONS")
           fi
-          poetry run python run_bot.py --mode test_questions "${args[@]}"
+          poetry run python run_bot.py --mode main "${args[@]}"
         env:
           PYTHONUNBUFFERED: "1"
           MAX_QUESTIONS: ${{ inputs.max_questions }}
-          BOT_PUBLISH: ${{ inputs.publish }}
+          BOT_PUBLISH: ${{ vars.BOT_LIVE }}
           BOT_RESEARCHER: ${{ vars.BOT_RESEARCHER }}
           METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

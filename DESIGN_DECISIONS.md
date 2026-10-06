@@ -2,6 +2,12 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## No Google model, 2026-10-06
+**Decision (owner):** No Google model is used. **Why:** not stated. **Rejected:**
+a third forecast from a Google model, as the bot we learned from uses. **Binds:** the line-up
+in `bot/config.py` is two vendors (OpenAI and Anthropic), with OpenAI answering twice so the
+median still has three forecasts; a test fails if a Google model is added.
+
 ## Pushing verified work to `main`, 2026-10-06
 **Decision (owner):** Verified work may be pushed to `main` of this repository. **Why:** the bot runs from GitHub Actions, so nothing can be tested end to end
 until it is on GitHub. **Rejected:** asking before every push. **Binds:** recorded as a
