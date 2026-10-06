@@ -549,7 +549,7 @@ class LimitsTest(unittest.TestCase):
         self.assertEqual(config.HELPER_MAX_OUTPUT_TOKENS, 4000)
         self.assertEqual(config.RESEARCH_MAX_CHARS, 16000)
         self.assertEqual(config.QUOTED_ANSWER_MAX_CHARS, 4000)
-        self.assertEqual(config.MAX_QUESTIONS_PER_RUN, 6)
+        self.assertEqual(config.MAX_QUESTIONS_PER_RUN, 5)
         self.assertEqual(config.RUN_COST_CEILING_USD, 25)
         self.assertLess(config.RESEARCH_RETRY_MAX_CHARS, config.RESEARCH_MAX_CHARS - 100)
 
@@ -604,8 +604,14 @@ class LimitsTest(unittest.TestCase):
 
     def test_a_run_stays_under_the_cost_ceiling(self):
         # A config change that lifts the bound over the ceiling fails here.
-        self.assertLess(limits.worst_case_run_cost_usd(), config.RUN_COST_CEILING_USD)
-        self.assertGreater(limits.worst_case_run_cost_usd(), 0)
+        self.assertEqual(
+            set(limits.KINDS), {"binary", "multiple_choice", "plain", "conditional"}
+        )
+        for kind in limits.KINDS:
+            bound = limits.worst_case_run_cost_usd(kind)
+            self.assertLess(bound, config.RUN_COST_CEILING_USD, kind)
+            self.assertGreater(bound, 0, kind)
+        self.assertEqual(config.RUN_COST_CEILING_USD, 25)
         for kind in ("multiple_choice", "plain"):
             self.assertLess(
                 limits.worst_case_run_cost_usd(kind), limits.worst_case_run_cost_usd()

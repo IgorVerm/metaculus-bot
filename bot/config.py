@@ -96,11 +96,11 @@ MAX_LOGGED_SOURCES = 60
 RESEARCH_MAX_CHARS = 16000
 RESEARCH_RETRY_MAX_CHARS = 5000
 QUOTED_ANSWER_MAX_CHARS = 4000
-MAX_QUESTIONS_PER_RUN = 6
+MAX_QUESTIONS_PER_RUN = 5
 
 # The bound on a run's cost (limits.worst_case_run_cost_usd). List prices in US dollars per
 # million tokens, (input, output), checked 2026-10-06. A test fails when the bound for a run of
-# yes/no questions exceeds the ceiling.
+# any kind of question exceeds the ceiling.
 PRICES_USD_PER_MILLION_TOKENS: dict[str, tuple[float, float]] = {
     "openrouter/openai/gpt-6.1-sol": (2.0, 10.0),
     "openrouter/anthropic/claude-opus-5.5": (4.0, 20.0),

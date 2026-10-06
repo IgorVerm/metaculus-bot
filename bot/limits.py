@@ -140,7 +140,8 @@ def worst_case_question_cost_usd(kind: str = BINARY) -> float:
 def worst_case_run_cost_usd(kind: str = BINARY) -> float:
     """Upper bound in US dollars for one run in which every question is of this kind.
 
-    The default is a yes/no question, the most expensive kind our method answers. See
+    The default is a yes/no question, the most expensive kind our method answers; a
+    conditional question, which the template forecasts in four parts, costs more. See
     worst_case_question_cost_usd for what is and is not included; web-search fees are not,
     because they are not known.
     """

@@ -934,7 +934,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"search model: {config.SEARCH_MODEL}")
         print(
             f"limits: {config.MAX_QUESTIONS_PER_RUN} questions per run, "
-            f"worst case ${limits.worst_case_run_cost_usd():.2f} per run"
+            f"worst case ${max(map(limits.worst_case_run_cost_usd, limits.KINDS)):.2f} per run"
         )
         return 0
 

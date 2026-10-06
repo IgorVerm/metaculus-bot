@@ -20,8 +20,8 @@ Checked on 2026-10-06.
   often models contradict themselves, how often a fallback fires, and the cost per question
   (estimated at $0.70 to $1.60 from list prices; not measured).
 - Hard limits are in place (`docs/design/bot.md`, "Limits"): output caps per call, a cap on
-  research text in prompts, six questions per run, and a computed worst case of $21.53 per run
-  of yes/no questions under a ceiling of $25. Their effect on real calls is unverified until
+  research text in prompts, five questions per run, and a computed worst case of $24.00 per run
+  (conditional questions; $17.94 for yes/no) under a ceiling of $25. Their effect on real calls is unverified until
   the first run: whether `max_tokens` reaches each vendor through OpenRouter, and whether
   12,000 tokens is enough for an answer at high reasoning effort (a cap that binds returns an
   empty answer, which shows as `FALLBACK`).

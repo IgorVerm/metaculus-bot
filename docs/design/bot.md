@@ -180,7 +180,7 @@ plain arithmetic, set in `bot/config.py` and applied by `bot/limits.py` and `run
 | Output per parser or summarizer call | 4,000 tokens | the same for the helper models |
 | Research text in a prompt | 16,000 characters per framing | a long search result multiplied into every answer's input |
 | A model's own answer quoted in a second look | 4,000 characters each | a long structured answer fed back whole |
-| Questions per run | 6 | a full tournament answered in one run after a pause |
+| Questions per run | 5 | a full tournament answered in one run after a pause |
 
 A cut text ends with a marker saying it was cut. When the freshness retry ran, both parts are
 cut (the retry to 5,000 characters), so the newest developments are never the part lost. The
@@ -193,12 +193,18 @@ next run takes them because they are still unforecast.
 
 `limits.worst_case_run_cost_usd()` computes the most a run can cost from these settings and
 the list prices of 2026-10-06 alone: every call at its input and output cap, every flagship
-and search call tried twice, every parser sample tried six times. A yes/no question costs at
-most $3.59 and a run of six at most $21.53; a test fails when a config change lifts that over
-the ceiling of $25 (`RUN_COST_CEILING_USD`). Multiple choice is at most $2.72 per question,
-numeric and date questions $1.21. A conditional question is at most $4.80, because the
-template forecasts four parts in each of its three forecasts, so a run of six conditional
-questions could reach $28.80, above the ceiling; the test does not cover that case. Not
+and search call tried twice, every parser sample tried six times. A test fails when a config change lifts the
+bound for any kind of question over the ceiling of $25 (`RUN_COST_CEILING_USD`).
+
+| Question | At most per question | At most per run of five |
+|---|---|---|
+| Yes/no | $3.59 | $17.94 |
+| Multiple choice | $2.72 | $13.61 |
+| Numeric, discrete, date | $1.21 | $6.03 |
+| Conditional | $4.80 | $24.00 |
+
+A conditional question costs most because the template forecasts four parts in each of its
+three forecasts. Not
 included, because they are not known: web-search fees and the search results a vendor adds
 to a search model's input. The bound assumes the question and our instructions fit in 3,000
 tokens per call. These are bounds, not expectations: the expected cost is far lower and is
