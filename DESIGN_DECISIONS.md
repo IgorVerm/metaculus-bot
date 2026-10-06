@@ -2,6 +2,20 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## The tournament is the check; multiple choice is in, 2026-10-06
+**Decision (owner):** Multiple choice is included. No comparison group is built into
+the bot: the tournament itself is the check, with the reference bots as the benchmark. **Why:** Metaculus's own reference bots forecast the same questions, so the bot's
+score against theirs shows whether the method works. **Rejected:** a comparison group inside
+the bot, in which half the questions would skip the second look. **Binds:** issue #9; every
+self-contradiction gets a second look.
+
+## Our method: framings on two models with a formal consistency check, 2026-10-06
+**Decision (owner):** Use three framings on two models (one from Anthropic, one from
+OpenAI), with a consistency check inspired by formal proof in Lean: six answers at high effort. **Why:** no published entrant plan uses a formal
+check. **Rejected:** forecasting sibling questions
+together; a starting number from the tournament's history; running Lean during a forecast.
+**Binds:** issue #9 is the specification. It replaces the three-forecast line-up once built.
+
 ## Build our own; take only what did not work, 2026-10-06
 **Decision (owner):** Drop everything adopted from the other entrant's bot and build our
 own; keep only its record of what did not work. All four adopted pieces go. **Why:** not stated. **Rejected:** keeping the adopted pieces as plain engineering; keeping
