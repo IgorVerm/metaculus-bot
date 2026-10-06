@@ -73,6 +73,10 @@ Research runs once per framing and both models read it.
 - **Direct:** the template's research (AskNews when its credentials are set, otherwise the
   search model, built with the same time limit as our own requests). Other question types use
   this same research.
+  A research source must be named `openrouter/...`, `asknews/...` or exactly `no_research`
+  (`bot/researcher.py`); a run with any other `BOT_RESEARCHER` stops before it spends
+  anything, because the framework puts a credential into the published model settings for
+  other routes such as `metaculus/...` and `exa/...`.
 - **Reversed:** a request to the search model (a cheap model with its vendor's web search,
   `SEARCH_MODEL` in `bot/config.py`) for reasons and evidence that the outcome will
   not happen.

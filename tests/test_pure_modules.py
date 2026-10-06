@@ -5,7 +5,7 @@ import io
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from bot import config, credits, slots, timebudget
+from bot import config, credits, researcher, slots, timebudget
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -129,6 +129,46 @@ class ConfigTest(unittest.TestCase):
     def test_search_model_searches_and_is_from_a_vendor_the_key_serves(self):
         self.assertTrue(config.SEARCH_MODEL.endswith(":online"))
         self.assertIn(config.SEARCH_MODEL.split("/")[1], ("openai", "anthropic"))
+
+
+class ResearcherTest(unittest.TestCase):
+    def test_only_openrouter_asknews_and_no_research_are_allowed(self):
+        for name in (
+            "openrouter/openai/gpt-6-luna:online",
+            config.RESEARCHER_WITHOUT_ASKNEWS,
+            config.RESEARCHER_WITH_ASKNEWS,
+            config.SEARCH_MODEL,
+            "asknews/deep-research/low-depth",
+            "no_research",
+        ):
+            self.assertTrue(researcher.allowed(name), name)
+        for name in (
+            "metaculus/x",  # the framework would put the Metaculus token into published settings
+            "exa/x",  # likewise an API key
+            "smart-searcher/openrouter/x",
+            "",
+            None,
+            "None",
+            "No_Research",
+            "no_research ",
+            " openrouter/openai/x",
+            "OpenRouter/openai/x",
+            "openrouter",
+            "openai/gpt-6-luna",
+            "perplexity/sonar",
+            "metaculus/openrouter/x",
+            5,
+        ):
+            self.assertFalse(researcher.allowed(name), repr(name))
+
+    def test_only_openrouter_names_are_built_as_model_objects(self):
+        self.assertTrue(researcher.is_openrouter_model("openrouter/openai/gpt-6-luna:online"))
+        for name in ("asknews/news-summaries", "no_research", "metaculus/x", "exa/x", "", None):
+            self.assertFalse(researcher.is_openrouter_model(name), repr(name))
+
+    def test_the_error_text_names_the_allowed_forms(self):
+        for form in ("openrouter/", "asknews/", "no_research"):
+            self.assertIn(form, researcher.ALLOWED_FORMS)
 
 
 if __name__ == "__main__":

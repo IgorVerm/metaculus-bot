@@ -545,9 +545,19 @@ class PipelineTest(unittest.TestCase):
                 self.assertIsInstance(override, GeneralLlm)
                 self.assertEqual(override.model, plain_name)
                 self.assertEqual(override.litellm_kwargs["timeout"], config.SEARCH_TIMEOUT_SECONDS)
-            for name in ("asknews/deep-research/low-depth", "smart-searcher/x", "no_research"):
+            for name in ("asknews/deep-research/low-depth", "no_research"):
                 with mock.patch.dict(os.environ, {config.RESEARCHER_ENV: name}):
                     self.assertEqual(run_bot.build_researcher(), name)
+            # Routes that would put a credential into the published model settings.
+            for name in ("metaculus/stand-in", "exa/stand-in", "smart-searcher/openrouter/x"):
+                with mock.patch.dict(os.environ, {config.RESEARCHER_ENV: name}):
+                    with self.assertRaises(ValueError):
+                        run_bot.build_researcher()
+                    with self.assertRaises(ValueError):
+                        run_bot.build_bot("full", publish=False, skip_forecasted=True)
+                    with self.assertLogs("run_bot", level="ERROR") as refused:
+                        self.assertEqual(run_bot.main(["--dry-run"]), 1)
+                    self.assertIn("not allowed", refused.records[0].getMessage())
             with mock.patch.dict(os.environ, {"ASKNEWS_API_KEY": "stand-in"}):
                 self.assertEqual(run_bot.build_researcher(), config.RESEARCHER_WITH_ASKNEWS)
 

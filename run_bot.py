@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any
 
-from bot import config, credits, formal, framings, freshness, slots, timebudget
+from bot import config, credits, formal, framings, freshness, researcher, slots, timebudget
 from main import FallTemplateBot2026  # also silences noisy dependencies and loads .env
 
 from bot_helpers import check_environment, print_run_summary_banner, print_startup_banner
@@ -809,11 +809,16 @@ def choose_researcher() -> str:
 
 
 def build_researcher() -> str | GeneralLlm:
-    """The template's research source. A plain model name is built with the search model's
-    time limit and tries; given as a name, the template would build it with the framework's
-    short default time limit. AskNews and the other named sources stay names."""
+    """The template's research source.
+
+    An OpenRouter model is built with the search model's time limit and tries; given as a
+    name, the template would build it with the framework's short default time limit. AskNews
+    and "no_research" stay names. Any other name is refused (bot/researcher.py).
+    """
     name = choose_researcher()
-    return build_search_model(name) if freshness.from_search_model(name) else name
+    if not researcher.allowed(name):
+        raise ValueError(f"Researcher not allowed. Use {researcher.ALLOWED_FORMS}.")
+    return build_search_model(name) if researcher.is_openrouter_model(name) else name
 
 
 def build_bot(lineup: credits.Lineup, publish: bool, skip_forecasted: bool) -> MedianBot:
@@ -868,6 +873,16 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     args = parse_args(argv)
+
+    chosen = choose_researcher()
+    if not researcher.allowed(chosen):
+        # Refuse before building or spending anything: other routes put a credential into
+        # the model settings that are published with each forecast.
+        logger.error(
+            f"{config.RESEARCHER_ENV} is '{chosen}', which is not allowed. "
+            f"Use {researcher.ALLOWED_FORMS}. Nothing was run."
+        )
+        return 1
 
     if args.self_check:
         bot = build_bot("full", publish=False, skip_forecasted=True)
