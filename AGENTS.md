@@ -36,6 +36,10 @@ word; never commit a secret. This file adds only what is specific to this reposi
   file on a model's say-so. Adding such a step needs the owner's decision and an independent
   review first, because it is what turns a manipulated web page from a wrong forecast into a
   real breach (`DESIGN_DECISIONS.md`, 2026-10-06).
+- **Only the owner switches a workflow on.** He disabled the workflows on GitHub by hand; an agent
+  never enables one (`gh workflow enable`, the Actions settings or the API). An agent may start
+  a workflow that the owner has enabled, within the rules below: `ci.yaml` once per landing that
+  touches code, and a bot workflow only on his word for that run.
 - **Workflows stay locked down:** a workflow that receives secrets is triggered by `schedule`
   and `workflow_dispatch` only, never by a pull request. Actions are pinned to commit hashes,
   `permissions` is `contents: read`, every step has a timeout, and a workflow receives only the

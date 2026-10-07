@@ -2,6 +2,19 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## Only the owner switches workflows on, 2026-10-06
+**Decision (owner):** The owner disabled all workflows on GitHub by hand and is the only
+one who turns them on; `ci.yaml` alone was enabled later, to be used sparingly. **Why:** the bot must not be able to run or spend without the owner;
+GitHub's included minutes are limited. **Rejected:** a build check on every push. **Binds:** the rule in `AGENTS.md`; `ci.yaml` is
+started by hand, once per landing that touches code.
+
+## Hard limits on tokens, 2026-10-06
+**Decision (owner):** A guardrail must prevent a single call from consuming an enormous
+number of tokens; a first worst case of about $79 for a run of twelve questions was rejected. **Why:** the donated credit is not refilled within a season. **Rejected:** the looser first
+limits (24,000 output tokens, twelve questions per run, a $100 ceiling). **Binds:** the limits
+in `bot/config.py` and the test that every question kind stays under `RUN_COST_CEILING_USD`;
+raising a limit means that test decides whether the questions-per-run cap must drop.
+
 ## Specification of our method confirmed, 2026-10-06
 **Decision (owner):** Build the method now, with all four additions (research per
 framing, no lost questions, numeric questions, early measurement) and with fresh information

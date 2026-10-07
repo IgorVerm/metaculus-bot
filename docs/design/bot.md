@@ -189,7 +189,9 @@ evidence date is read before the cut. For other question types the research is c
 `MedianBot.run_research` produces it. A conditional question is forecast in four parts, and the
 template appends each earlier part's forecast and reasoning to the research of the later
 ones; `MedianBot._add_reasoning_to_research` cuts that reasoning and leaves the forecast value
-whole, so a later part always reads the earlier forecasts. A last cut where the template's
+whole, so whatever the template appends for a later part stays readable. (The template itself
+appends the child's and the yes-part's forecasts; the parent's forecast does not reach later
+parts. That is upstream behaviour.) A last cut where the template's
 forecast receives the research is a backstop, sized above anything those two cuts can
 produce. The parser and the summarizer are built as model objects
 so that they carry their cap. The questions that close soonest are taken first (unknown close times last), so a cap never

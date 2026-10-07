@@ -1,6 +1,6 @@
 # Metaculus bot: current state
 
-Checked on 2026-10-06.
+Checked on 2026-10-07.
 
 ## State
 - Public fork of `Metaculus/metac-bot-template`. Our bot is `run_bot.py` plus the modules in
@@ -34,6 +34,8 @@ Checked on 2026-10-06.
   uses six per question.
 - Nothing publishes. The repository variable `BOT_LIVE` is unset, so scheduled runs are skipped
   and manual runs are dry runs. Switching it on is issue #6, the owner's decision.
+- the owner disabled the three bot workflows on GitHub by hand and enabled only `ci.yaml`. Only he
+  switches a workflow on (`AGENTS.md`).
 
 ## Build, test, run
 ```bash
@@ -66,8 +68,7 @@ Secrets: `METACULUS_TOKEN`, `OPENROUTER_API_KEY`, and, when granted, `ASKNEWS_AP
 donates and no other key; it is unset until that key
 arrives.
 
-GitHub switches scheduled workflows off after 60 days without a commit, and a fork starts with
-them off; check the Actions tab if runs stop.
+GitHub switches scheduled workflows off after 60 days without a commit.
 
 ## What to read for which work
 | Work on | Read |
