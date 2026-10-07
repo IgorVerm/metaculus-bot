@@ -23,7 +23,9 @@ Checked on 2026-10-07.
      the donated key and the `reasoning` setting is accepted.
   3. Whether the `:online` search models work and return the `NEWEST_EVIDENCE_DATE` line, and
      whether the parser model fills the structured answer reliably.
-  4. How often models contradict themselves, how often a fallback fires, and the cost per
+  4. Whether the models follow the structured prompt's rules for events (separate factors,
+     conditional steps only beside their condition); a local trial on one model did.
+  5. How often models contradict themselves, how often a fallback fires, and the cost per
      question (estimated at $0.70 to $1.60 from list prices; not measured).
 - Hard limits are in place (`docs/design/bot.md`, "Limits"): output caps per call, caps on
   research and quoted text in prompts, five questions per run taken soonest-closing first,
