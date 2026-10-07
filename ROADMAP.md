@@ -1,6 +1,6 @@
 # Metaculus bot: roadmap
 
-Concrete work lives in GitHub issues on IgorVerm/metaculus-bot. This file holds direction only.
+Concrete work lives in GitHub issues on this repository. This file holds direction only.
 
 ## Direction
 

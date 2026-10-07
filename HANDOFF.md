@@ -36,7 +36,7 @@ Checked on 2026-10-07.
   uses six per question.
 - Nothing publishes. The repository variable `BOT_LIVE` is unset, so scheduled runs are skipped
   and manual runs are dry runs. Switching it on is issue #6, the owner's decision.
-- the owner disabled the three bot workflows on GitHub by hand and enabled only `ci.yaml`. Only he
+- The owner disabled the three bot workflows on GitHub by hand and enabled only `ci.yaml`. Only he
   switches a workflow on (`AGENTS.md`).
 
 ## Build, test, run
