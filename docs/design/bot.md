@@ -69,8 +69,9 @@ structured one, and a chain whose overall answer is one point off its event is n
 happened, this happens". The range stays valid where the statement joins such an event to its
 condition with `and` (the product of the two always lies inside the `and` range). Used
 elsewhere in a statement, or chosen for the conditional split, it can produce a false finding.
-The prompt asks the model not to do either; the checker cannot verify it. The cost of a false
-finding is one second look, never a changed number. With the rewritten prompt, four questions
+The prompt asks the model not to do either; the checker cannot verify it. A false finding costs
+one second look, whose answer replaces that model's direct answer; the checker itself never
+changes a number. With the rewritten prompt, four questions
 that had produced chains produced such conditional steps, joined with `and`, and no finding.
 
 A model contradicts itself on a yes/no question when its direct answer, its converted reversed
