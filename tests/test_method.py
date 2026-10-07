@@ -237,16 +237,28 @@ class BinaryContradictionTest(unittest.TestCase):
         # Each event contains the next and the last is the question: the range would only
         # repeat the model's own answer, so a direct answer far from it is not a finding.
         chain = structured([("A", 0.6), ("B", 0.07), ("C", 0.03)], "A and B and C", 0.03)
-        result = formal.check_binary(0.2, None, chain, **SETTINGS)
+        result = formal.check_binary(0.1, None, chain, **SETTINGS)  # inside the pair tolerance
         self.assertIsNone(result.value_range)
         self.assertFalse(result.contradicted)
         self.assertTrue(any("chain" in reason for reason in result.skipped))
+
+    def test_on_a_chain_the_direct_answer_is_compared_with_the_structured_one(self):
+        chain = structured([("A", 0.6), ("B", 0.07), ("C", 0.03)], "A and B and C", 0.03)
+        self.assertFalse(formal.check_binary(0.13, None, chain, **SETTINGS).contradicted)
+        result = formal.check_binary(0.2, None, chain, **SETTINGS)
+        self.assertEqual(len(result.findings), 1)
+        self.assertIn("20%", result.findings[0])
+        self.assertIn("3%", result.findings[0])
+        self.assertFalse(formal.check_binary(None, 0.9, chain, **SETTINGS).contradicted)
+        # With a range, the range test does this work and the pair test stays out.
+        ranged = structured([("A", 0.5), ("B", 0.6)], "A and B", 0.3)
+        self.assertFalse(formal.check_binary(0.45, None, ranged, **SETTINGS).contradicted)
         either = structured([("A", 0.4), ("B", 0.7)], "B or A", 0.7)
-        self.assertIsNone(formal.check_binary(0.2, None, either, **SETTINGS).value_range)
+        self.assertIsNone(formal.check_binary(0.7, None, either, **SETTINGS).value_range)
         self.assertTrue(formal.is_chain("A and B", {"A": 0.97, "B": 0.75}, 0.754))
         self.assertFalse(formal.is_chain("A and B", {"A": 0.97, "B": 0.75}, 0.73))
         bracketed = structured([("A", 0.6), ("B", 0.07), ("C", 0.03)], "A and (B and C)", 0.03)
-        self.assertIsNone(formal.check_binary(0.2, None, bracketed, **SETTINGS).value_range)
+        self.assertIsNone(formal.check_binary(0.03, None, bracketed, **SETTINGS).value_range)
         self.assertTrue(formal.is_chain("A or B", {"A": 0.3, "B": 0.025}, 0.305))  # the margin itself
 
     def test_separate_events_keep_their_range(self):
@@ -275,7 +287,7 @@ class BinaryContradictionTest(unittest.TestCase):
         chain = structured([("A", 0.6), ("B", 0.2)], "A and B", 0.2, split)
         result = formal.check_binary(0.6, 0.3, chain, **SETTINGS)
         self.assertIsNone(result.value_range)
-        self.assertEqual(len(result.findings), 2)  # direct against reversed, and the split
+        self.assertEqual(len(result.findings), 3)  # direct against structured and reversed; the split
 
     def test_a_broken_split_is_skipped_and_the_pair_test_still_runs(self):
         for split in (

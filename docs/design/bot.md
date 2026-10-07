@@ -62,8 +62,9 @@ the numbers, because it cannot read the descriptions, so it also drops the range
 certain event stands next to one that is the question. In a local trial on nine resolved
 questions (one model, no research, 2026-10-07) most structured answers were such chains.
 A statement of one event alone keeps its range, which then compares the model's answers with
-that event's probability. Known gaps: on a chain nothing compares the direct answer with the
-structured one, and a chain whose overall answer is one point off its event is not recognised.
+that event's probability. On a chain the direct answer is compared with the structured overall
+answer instead, at the pair tolerance, so a disagreement between those two is still found.
+Known gap: a chain whose overall answer is one point off its event is not recognised.
 
 **Conditional events.** The prompt lets a later step be described as "if the earlier steps
 happened, this happens". The range stays valid where the statement joins such an event to its

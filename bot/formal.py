@@ -293,6 +293,7 @@ def check_binary(
     """
     result = Consistency()
     overall = None
+    chain = False  # the structured answer gave no range because its events are a chain
     events: dict[str, float] = {}
 
     if structured is None:
@@ -306,6 +307,7 @@ def check_binary(
             events = events_from_pairs(structured.get("events") or [])
             value_range = statement_range(structured.get("statement"), events, max_events)
             if overall is not None and is_chain(structured["statement"], events, overall):
+                chain = True
                 raise StatementError(
                     "the overall answer repeats one event's probability, so the events are a "
                     "chain and their range says nothing new"
@@ -336,6 +338,12 @@ def check_binary(
                 f"probability of No you answered {percent(1.0 - reversed_converted)}, which means "
                 f"{percent(reversed_converted)} for Yes. These two must be the same number."
             )
+
+    if chain and direct is not None and differ(direct, overall, pair_tolerance):
+        result.findings.append(
+            f"Asked directly you answered {percent(direct)}. In the structured framing your "
+            f"overall answer is {percent(overall)}. These two must be the same number."
+        )
 
     split = structured.get("split") if structured else None
     if split is not None and overall is not None:

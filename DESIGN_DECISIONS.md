@@ -2,6 +2,12 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## On a chain, direct is compared with structured, 2026-10-07
+**Decision (owner):** Add a plain pair test between the direct and the structured
+answer for the case where a chain gives no range. **Why:** without it a direct answer of 20%
+against a structured answer of 3% passed silently. **Rejected:** nothing. **Binds:**
+`formal.check_binary`, at `PAIR_TOLERANCE`, only when the range was dropped as a chain (issue #13).
+
 ## Structured framing: separate events; a chain gives no range, 2026-10-07
 **Decision (owner):** Rewrite the structured prompt so that events do not contain each
 other, and have the checker refuse a chain. **Why:** in a local trial
