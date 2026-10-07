@@ -67,8 +67,7 @@ other routes, and any other value stops the run).
 
 Secrets: `METACULUS_TOKEN`, `OPENROUTER_API_KEY`, and, when granted, `ASKNEWS_API_KEY` (or
 `ASKNEWS_CLIENT_ID` with `ASKNEWS_SECRET`). `OPENROUTER_API_KEY` must be the key Metaculus
-donates and no other key; it is unset until that key
-arrives.
+donates and no other key; it is unset until that key arrives.
 
 GitHub switches scheduled workflows off after 60 days without a commit.
 
