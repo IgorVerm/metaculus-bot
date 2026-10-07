@@ -3,7 +3,9 @@
 A model writes a question's resolution criteria as a statement over events it named itself
 ("A and (B or not C)") and gives each event a probability. From those probabilities alone the
 statement's probability must lie in a range, whatever the dependence between the events. An
-answer outside that range contradicts the model's own event probabilities.
+answer outside that range contradicts the model's own event probabilities. (An event described
+as "if X happens, Y happens" keeps this true only where the statement joins it to X with "and";
+the prompt asks for that, the checker cannot verify it.)
 
 The statement is read by the parser below, over a fixed set of tokens. It is never evaluated
 as code, and anything outside the token set is refused.
@@ -201,6 +203,21 @@ def statement_range(
     return bounds(tree, events)
 
 
+def _flat_labels(tree, kind: str) -> list[str] | None:
+    """The labels of a statement that is only `kind` over plain events, brackets or not."""
+    if tree[0] == "var":
+        return [tree[1]]
+    if tree[0] != kind:
+        return None
+    found: list[str] = []
+    for part in tree[1]:
+        inner = _flat_labels(part, kind)
+        if inner is None:
+            return None
+        found += inner
+    return found
+
+
 def is_chain(statement: str, events: dict[str, float], overall: float) -> bool:
     """True when the overall answer only repeats one event's probability.
 
@@ -210,13 +227,18 @@ def is_chain(statement: str, events: dict[str, float], overall: float) -> bool:
     one is the question itself, and the range computed from it repeats the model's own answer.
     The checker cannot read the descriptions, so this is judged from the numbers alone; it also
     catches an event that is nearly certain next to one that is the question.
+
+    Call it after statement_range accepted the statement: it expects every label in events.
     """
     tree = parse(statement)
-    if tree[0] not in ("and", "or") or any(part[0] != "var" for part in tree[1]):
+    if tree[0] not in ("and", "or"):
         return False
-    values = [events[part[1]] for part in tree[1]]
+    labels = _flat_labels(tree, tree[0])
+    if labels is None:
+        return False
+    values = [events[label] for label in labels]
     repeated = min(values) if tree[0] == "and" else max(values)
-    return abs(overall - repeated) <= CHAIN_MARGIN
+    return abs(overall - repeated) <= CHAIN_MARGIN + EPSILON
 
 
 # --- contradiction tests ---

@@ -245,6 +245,9 @@ class BinaryContradictionTest(unittest.TestCase):
         self.assertIsNone(formal.check_binary(0.2, None, either, **SETTINGS).value_range)
         self.assertTrue(formal.is_chain("A and B", {"A": 0.97, "B": 0.75}, 0.754))
         self.assertFalse(formal.is_chain("A and B", {"A": 0.97, "B": 0.75}, 0.73))
+        bracketed = structured([("A", 0.6), ("B", 0.07), ("C", 0.03)], "A and (B and C)", 0.03)
+        self.assertIsNone(formal.check_binary(0.2, None, bracketed, **SETTINGS).value_range)
+        self.assertTrue(formal.is_chain("A or B", {"A": 0.3, "B": 0.025}, 0.305))  # the margin itself
 
     def test_separate_events_keep_their_range(self):
         for statement, overall in (
@@ -252,11 +255,20 @@ class BinaryContradictionTest(unittest.TestCase):
             ("A or B", 0.8),  # above the most likely event
             ("A and (B or C)", 0.5),  # not a plain and: judged by its range alone
             ("not (A or B)", 0.4),
-            ("A", 0.5),
+            ("A", 0.5),  # one event: the model did not split the question, its answers are compared
         ):
             answer = structured([("A", 0.5), ("B", 0.6), ("C", 0.1)], statement, overall)
             result = formal.check_binary(None, None, answer, **SETTINGS)
             self.assertIsNotNone(result.value_range, statement)
+        no_overall = structured([("A", 0.6), ("B", 0.03)], "A and B", None)
+        self.assertIsNotNone(formal.check_binary(0.03, None, no_overall, **SETTINGS).value_range)
+
+    def test_conditional_events_stay_inside_the_range_when_joined_to_their_condition(self):
+        # "A" and "if A, then B": the product of the two always lies inside the and-range.
+        for first in (0.0, 0.1, 0.5, 0.9, 1.0):
+            for given in (0.0, 0.2, 0.5, 0.8, 1.0):
+                low, high = formal.statement_range("A and B", {"A": first, "B": given}, 6)
+                self.assertTrue(low - 1e-9 <= first * given <= high + 1e-9, (first, given))
 
     def test_the_other_tests_still_run_on_a_chain(self):
         split = {"event": "A", "if_yes": 0.9, "if_no": 0.0}  # 0.6 * 0.9 = 0.54
@@ -424,6 +436,7 @@ class PromptTest(unittest.TestCase):
         self.assertTrue(prompts[1].startswith(framings.STRUCTURED_TITLE))
         self.assertIn("A, B, C, D, E, F", prompts[1])
         self.assertIn("no event may contain another", prompts[1])
+        self.assertIn("may appear only joined by and", prompts[1])
         self.assertIn("1. clash", prompts[2])
         self.assertIn('"Probability: ZZ%"', prompts[2])
         options = framings.reversed_options_prompt(self.OPTIONS, "", TODAY)

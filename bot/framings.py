@@ -280,8 +280,10 @@ def structured_binary_prompt(
             "passes\"), and give the probability of that.\n"
             "2. Write the resolution criteria as one statement over those labels that is true "
             "exactly when the question resolves Yes. Use only the labels, the words and, or, "
-            "not, and brackets. Example: A and (B or not C).\n"
-            "3. Optionally give one conditional split: choose one of your events and give the "
+            "not, and brackets. Example: A and (B or not C). An event you described as \"if "
+            "... happened\" may appear only joined by and to the events it depends on.\n"
+            "3. Optionally give one conditional split: choose one of your events that is not "
+            "described as \"if ... happened\" and give the "
             "probability of Yes if it happens and the probability of Yes if it does not.\n"
             "4. Give your overall probability that the question resolves Yes.",
             "The last thing you write is your final answer in exactly this form:\n"

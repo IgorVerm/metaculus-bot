@@ -50,7 +50,7 @@ probabilities alone it computes the range the statement's probability must lie i
 - `and` of k parts → [max(0, Σl − (k − 1)), min(u)]
 - `or` of k parts → [max(l), min(1, Σu)]
 
-These hold for any dependence between the events. The tests check that against the exact
+These hold for any dependence between the events (see "Conditional events" below for the one exception). The tests check that against the exact
 probabilities of 3,000 random joint distributions.
 
 **A chain gives no range.** When the statement is a plain `and` and the overall answer equals
@@ -61,6 +61,17 @@ computes no range and says so under `skipped`; the other tests still run. It jud
 the numbers, because it cannot read the descriptions, so it also drops the range when a nearly
 certain event stands next to one that is the question. In a local trial on nine resolved
 questions (one model, no research, 2026-10-07) most structured answers were such chains.
+A statement of one event alone keeps its range, which then compares the model's answers with
+that event's probability. Known gaps: on a chain nothing compares the direct answer with the
+structured one, and a chain whose overall answer is one point off its event is not recognised.
+
+**Conditional events.** The prompt lets a later step be described as "if the earlier steps
+happened, this happens". The range stays valid where the statement joins such an event to its
+condition with `and` (the product of the two always lies inside the `and` range). Used
+elsewhere in a statement, or chosen for the conditional split, it can produce a false finding.
+The prompt asks the model not to do either; the checker cannot verify it. The cost of a false
+finding is one second look, never a changed number. With the rewritten prompt, four questions
+that had produced chains produced such conditional steps, joined with `and`, and no finding.
 
 A model contradicts itself on a yes/no question when its direct answer, its converted reversed
 answer or its structured overall answer lies outside the range by more than the range
