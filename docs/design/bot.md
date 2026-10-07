@@ -34,8 +34,11 @@ kept in [0.01, 0.99] as in the template; every multiple-choice option is kept at
 In the structured framing the model names at most six events (A to F) with a probability each,
 writes the resolution criteria as a statement over the labels with `and`, `or`, `not` and
 brackets, may give one conditional split (its answer if a named event happens, and if it does
-not), and gives its overall answer. The structured answer is parsed once, not twice as the
-others are: event descriptions are free text, and two parses of free text rarely match exactly.
+not), and gives its overall answer. The prompt asks for events that are separate factors: none
+may contain another or be the question in other words, and a later step in a sequence is
+described as what happens given the earlier steps. The structured answer is parsed once, not
+twice as the others are: event descriptions are free text, and two parses of free text rarely
+match exactly.
 
 ### The checker
 
@@ -49,6 +52,15 @@ probabilities alone it computes the range the statement's probability must lie i
 
 These hold for any dependence between the events. The tests check that against the exact
 probabilities of 3,000 random joint distributions.
+
+**A chain gives no range.** When the statement is a plain `and` and the overall answer equals
+its least likely event, or a plain `or` and the overall answer equals its most likely event
+(within half a percentage point), the events contain each other and one of them is the
+question itself, so the range would only repeat the model's own answer. The checker then
+computes no range and says so under `skipped`; the other tests still run. It judges this from
+the numbers, because it cannot read the descriptions, so it also drops the range when a nearly
+certain event stands next to one that is the question. In a local trial on nine resolved
+questions (one model, no research, 2026-10-07) most structured answers were such chains.
 
 A model contradicts itself on a yes/no question when its direct answer, its converted reversed
 answer or its structured overall answer lies outside the range by more than the range

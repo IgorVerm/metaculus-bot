@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 LABELS = ("A", "B", "C", "D", "E", "F")
 MAX_STATEMENT_TOKENS = 200  # a statement over six events never needs more
 EPSILON = 1e-9  # "more than the tolerance" must not fire on float noise at the boundary
+CHAIN_MARGIN = 0.005  # two probabilities this close are the same number in whole percent
 
 _TOKEN = re.compile(r"\s*(\(|\)|[A-Za-z]+)")
 
@@ -200,6 +201,24 @@ def statement_range(
     return bounds(tree, events)
 
 
+def is_chain(statement: str, events: dict[str, float], overall: float) -> bool:
+    """True when the overall answer only repeats one event's probability.
+
+    A plain "and" of events whose overall answer equals its least likely event, or a plain "or"
+    whose overall answer equals its most likely event, is what a model writes when each event
+    contains the next ("it passes the Senate", "it passes the House", "it is signed"): the last
+    one is the question itself, and the range computed from it repeats the model's own answer.
+    The checker cannot read the descriptions, so this is judged from the numbers alone; it also
+    catches an event that is nearly certain next to one that is the question.
+    """
+    tree = parse(statement)
+    if tree[0] not in ("and", "or") or any(part[0] != "var" for part in tree[1]):
+        return False
+    values = [events[part[1]] for part in tree[1]]
+    repeated = min(values) if tree[0] == "and" else max(values)
+    return abs(overall - repeated) <= CHAIN_MARGIN
+
+
 # --- contradiction tests ---
 
 
@@ -263,7 +282,13 @@ def check_binary(
             result.skipped.append("the structured answer has no usable overall probability")
         try:
             events = events_from_pairs(structured.get("events") or [])
-            result.value_range = statement_range(structured.get("statement"), events, max_events)
+            value_range = statement_range(structured.get("statement"), events, max_events)
+            if overall is not None and is_chain(structured["statement"], events, overall):
+                raise StatementError(
+                    "the overall answer repeats one event's probability, so the events are a "
+                    "chain and their range says nothing new"
+                )
+            result.value_range = value_range
         except (StatementError, TypeError, ValueError) as error:
             result.skipped.append(f"no range: {error}")
 
