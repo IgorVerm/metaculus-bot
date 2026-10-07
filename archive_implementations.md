@@ -2,6 +2,7 @@
 
 Newest first: `YYYY-MM-DD — <item> (#n) — source <commit> — <durable link>`.
 
+2026-10-07 — Project summaries throughout documentation and issue records (#16) — issue #16
 2026-10-07 — On a chain the checker compares the direct with the structured answer (#13) — source 89343a2 — issue #13
 2026-10-07 — Structured framing asks for separate events; the checker gives no range for a chain (#12) — source cdba175 — issue #12
 2026-10-07 — Our method, milestone 1: framings on two models, formal consistency check, research per framing, hard limits (#9) — source 345f032 — issue #9

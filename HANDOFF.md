@@ -12,8 +12,8 @@ Checked on 2026-10-07.
   discrete and date questions) is not built.
 - The unit tests of the pure modules pass locally. `tests_framework/` runs our method against
   the installed framework with stand-in models; it can only run on a runner.
-- The bot has never run against Metaculus or a model: the repository has no secrets yet
-  (issue #4, the owner's steps).
+- `METACULUS_TOKEN` is configured; the donated model key is still pending (issue #4).
+  End-to-end operation against Metaculus and model providers is not yet validated (issue #5).
 - Not verified until that first run, the first item first:
   1. Whether 12,000 output tokens is enough for an answer at high reasoning effort. A cap that
      binds returns an empty answer; look for `FALLBACK` lines for answers that could not be
