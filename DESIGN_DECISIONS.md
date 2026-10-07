@@ -2,6 +2,14 @@
 
 The owner's rulings, newest first, in summary. Re-opening one needs the owner and a new entry.
 
+## Structured framing: separate events; a chain gives no range, 2026-10-07
+**Decision (owner):** Rewrite the structured prompt so that events do not contain each
+other, and have the checker refuse a chain. **Why:** in a local trial
+on nine resolved questions the model mostly named events where each contains the next, the
+last being the question itself, so the computed range only repeated its own answer.
+**Rejected:** nothing. **Binds:** step 1 of the structured prompt in `bot/framings.py` and
+`formal.is_chain`; changes the method specified in issue #9 (issue #12).
+
 ## Only the owner switches workflows on, 2026-10-06
 **Decision (owner):** The owner disabled all workflows on GitHub by hand and is the only
 one who turns them on; `ci.yaml` alone was enabled later, to be used sparingly. **Why:** the bot must not be able to run or spend without the owner;
