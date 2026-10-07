@@ -5,7 +5,7 @@ import io
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from bot import config, credits, slots, timebudget
+from bot import config, credits, researcher, slots, timebudget
 
 NOW = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
 
@@ -23,6 +23,46 @@ class TimeBudgetTest(unittest.TestCase):
     def test_naive_close_time_is_read_as_utc(self):
         naive = (NOW + timedelta(hours=1)).replace(tzinfo=None)
         self.assertEqual(timebudget.seconds_until(naive, NOW), 3600)
+
+
+class SoonestFirstTest(unittest.TestCase):
+    class Question:
+        def __init__(self, name, close_time):
+            self.name = name
+            self.close_time = close_time
+
+    def names(self, questions):
+        return [question.name for question in timebudget.soonest_first(questions)]
+
+    def test_soonest_first_and_unknown_last(self):
+        Question = self.Question
+        questions = [
+            Question("weeks", NOW + timedelta(days=20)),
+            Question("unknown", None),
+            Question("hours", NOW + timedelta(hours=2)),
+            Question("days", NOW + timedelta(days=2)),
+        ]
+        self.assertEqual(self.names(questions), ["hours", "days", "weeks", "unknown"])
+        self.assertEqual([q.name for q in questions][0], "weeks")  # the input is not changed
+
+    def test_equal_and_unknown_close_times_keep_their_order(self):
+        Question = self.Question
+        same = NOW + timedelta(days=1)
+        questions = [
+            Question("u1", None),
+            Question("b", same),
+            Question("u2", None),
+            Question("a", same),
+            Question("first", NOW),
+        ]
+        self.assertEqual(self.names(questions), ["first", "b", "a", "u1", "u2"])
+        self.assertEqual(timebudget.soonest_first([]), [])
+
+    def test_naive_close_time_is_read_as_utc(self):
+        Question = self.Question
+        naive = (NOW + timedelta(hours=1)).replace(tzinfo=None)
+        questions = [Question("aware", NOW + timedelta(hours=2)), Question("naive", naive)]
+        self.assertEqual(self.names(questions), ["naive", "aware"])
 
 
 class CreditsTest(unittest.TestCase):
@@ -98,17 +138,77 @@ class ConfigTest(unittest.TestCase):
         # credential into the model settings that the bot publishes with each forecast.
         names = [spec["model"] for spec in config.FORECASTERS]
         names += [config.PARSER_MODEL, config.SUMMARIZER_MODEL, config.RESEARCHER_WITHOUT_ASKNEWS]
+        names.append(config.SEARCH_MODEL)
         for name in names:
             self.assertTrue(name.startswith("openrouter/"), name)
 
     def test_no_google_model(self):
+        names = [spec["model"] for spec in config.FORECASTERS]
+        names += [config.PARSER_MODEL, config.RESEARCHER_WITHOUT_ASKNEWS, config.SEARCH_MODEL]
+        for name in names:
+            self.assertNotIn("google", name)
+            self.assertNotIn("gemini", name)
+
+    def test_two_models_from_two_vendors_at_high_effort(self):
+        vendors = [spec["model"].split("/")[1] for spec in config.FORECASTERS]
+        self.assertEqual(vendors, ["openai", "anthropic"])
         for spec in config.FORECASTERS:
-            self.assertNotIn("google", spec["model"])
+            self.assertEqual(spec["reasoning"], {"effort": "high"})
 
     def test_three_forecasts_from_two_vendors(self):
-        vendors = {spec["model"].split("/")[1] for spec in config.FORECASTERS}
-        self.assertEqual(len(config.FORECASTERS), 3)
-        self.assertEqual(len(vendors), 2)
+        # The question types outside our method: three plain forecasts, the first vendor twice.
+        lineup = [config.FORECASTERS[slot] for slot in config.PLAIN_FORECAST_SLOTS]
+        vendors = [spec["model"].split("/")[1] for spec in lineup]
+        self.assertEqual(len(lineup), 3)
+        self.assertEqual(len(set(vendors)), 2)
+        self.assertEqual(vendors, ["openai", "anthropic", "openai"])
+
+    def test_research_without_asknews_uses_the_search_model(self):
+        self.assertEqual(config.RESEARCHER_WITHOUT_ASKNEWS, config.SEARCH_MODEL)
+
+    def test_search_model_searches_and_is_from_a_vendor_the_key_serves(self):
+        self.assertTrue(config.SEARCH_MODEL.endswith(":online"))
+        self.assertIn(config.SEARCH_MODEL.split("/")[1], ("openai", "anthropic"))
+
+
+class ResearcherTest(unittest.TestCase):
+    def test_only_openrouter_asknews_and_no_research_are_allowed(self):
+        for name in (
+            "openrouter/openai/gpt-6-luna:online",
+            config.RESEARCHER_WITHOUT_ASKNEWS,
+            config.RESEARCHER_WITH_ASKNEWS,
+            config.SEARCH_MODEL,
+            "asknews/deep-research/low-depth",
+            "no_research",
+        ):
+            self.assertTrue(researcher.allowed(name), name)
+        for name in (
+            "metaculus/x",  # the framework would put the Metaculus token into published settings
+            "exa/x",  # likewise an API key
+            "smart-searcher/openrouter/x",
+            "",
+            None,
+            "None",
+            "No_Research",
+            "no_research ",
+            " openrouter/openai/x",
+            "OpenRouter/openai/x",
+            "openrouter",
+            "openai/gpt-6-luna",
+            "perplexity/sonar",
+            "metaculus/openrouter/x",
+            5,
+        ):
+            self.assertFalse(researcher.allowed(name), repr(name))
+
+    def test_only_openrouter_names_are_built_as_model_objects(self):
+        self.assertTrue(researcher.is_openrouter_model("openrouter/openai/gpt-6-luna:online"))
+        for name in ("asknews/news-summaries", "no_research", "metaculus/x", "exa/x", "", None):
+            self.assertFalse(researcher.is_openrouter_model(name), repr(name))
+
+    def test_the_error_text_names_the_allowed_forms(self):
+        for form in ("openrouter/", "asknews/", "no_research"):
+            self.assertIn(form, researcher.ALLOWED_FORMS)
 
 
 if __name__ == "__main__":

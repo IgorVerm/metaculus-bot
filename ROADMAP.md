@@ -18,7 +18,8 @@ re-forecast on a schedule.
 
 1. **Base.** The template with three forecasts from two vendors, the median, and our safety
    layer: publish switch, credit guard, locked-down workflows. Done.
-2. **Our method.** the owner chooses the design; it is specified on its issue, then built.
+2. **Our method.** Specified on issue #9. Milestone 1 (yes/no and multiple choice) is built;
+   milestone 2 (numeric, discrete and date questions) is not.
 3. **Prove the pipe.** A published run on the test area, then dry runs on live questions.
    Depends on the owner's bot account, the donated key and the repository secrets.
 4. **Live.** MiniBench and the main tournament, on the owner's word.

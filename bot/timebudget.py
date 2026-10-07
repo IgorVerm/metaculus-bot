@@ -18,3 +18,21 @@ def seconds_until(close_time: datetime | None, now: datetime | None = None) -> f
 def too_late(seconds_to_close: float | None) -> bool:
     """An unknown close time is not too late: forfeiting a question costs more than a late try."""
     return seconds_to_close is not None and seconds_to_close < config.SKIP_BELOW_SECONDS
+
+
+def soonest_first(questions: list) -> list:
+    """The questions ordered by close time, soonest first; unknown close times last.
+
+    Stable: questions with the same close time keep their order. A run that cannot take every
+    question then takes the ones that close first.
+    """
+
+    def key(question) -> tuple[int, float]:
+        close_time = getattr(question, "close_time", None)
+        if close_time is None:
+            return (1, 0.0)
+        if close_time.tzinfo is None:
+            close_time = close_time.replace(tzinfo=timezone.utc)
+        return (0, close_time.timestamp())
+
+    return sorted(questions, key=key)
